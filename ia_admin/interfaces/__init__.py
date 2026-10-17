@@ -1,0 +1,1 @@
+"""User-facing transport adapters."""

@@ -1,0 +1,1 @@
+"""IA-Admin application package."""
