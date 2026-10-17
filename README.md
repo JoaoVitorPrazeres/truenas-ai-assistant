@@ -180,18 +180,30 @@ Comandos disponíveis:
 
 ## Executar com Docker em outro computador (opcional)
 
-Para usar Docker, o Ollama ainda precisa estar instalado e servindo o modelo.
-Construa a imagem na pasta do projeto:
+Use estes passos para construir a imagem e executar o bot manualmente com
+Docker. O Ollama precisa estar instalado no computador que executa os
+containers, em execução e com o modelo baixado:
+
+```sh
+ollama pull qwen3:1.7b
+```
+
+Na pasta do projeto, crie e preencha o arquivo `.env` conforme a seção
+[Configuração do arquivo `.env`](#5-configure-o-arquivo-env). Defina nele o
+endereço do Ollama que o container poderá acessar:
+
+```dotenv
+OLLAMA_HOST=http://host.docker.internal:11434
+```
+
+Ainda na pasta do projeto, construa a imagem:
 
 ```sh
 docker build -t ia-admin-telegram .
 ```
 
-O endereço `127.0.0.1` dentro de um container aponta para o próprio container,
-não para o computador que executa Ollama. Por isso, configure `OLLAMA_HOST` em
-`.env` para um endereço que o container consiga acessar. No Linux, por exemplo,
-o comando abaixo permite resolver `host.docker.internal` para o endereço do
-host:
+Depois, inicie o bot. No Linux, adicione o mapeamento de `host.docker.internal`
+para o computador host:
 
 ```sh
 docker run --rm --env-file .env \
@@ -199,16 +211,18 @@ docker run --rm --env-file .env \
   ia-admin-telegram
 ```
 
-Nesse caso, configure no `.env`:
+No macOS e no Windows com Docker Desktop, use o mesmo comando sem
+`--add-host`:
 
-```dotenv
-OLLAMA_HOST=http://host.docker.internal:11434
+```sh
+docker run --rm --env-file .env ia-admin-telegram
 ```
 
-O serviço Ollama também precisa aceitar conexões do container. A forma de
-configurar isso depende de como o Ollama foi instalado. Restrinja essas
-conexões à rede confiável necessária. Para uma primeira instalação, executar
-sem Docker costuma ser mais simples.
+O bot continuará rodando no terminal; pressione `Ctrl+C` para pará-lo. A opção
+`--rm` remove o container ao parar, mas mantém a imagem construída. O endereço
+`127.0.0.1` dentro de um container aponta para o próprio container, não para o
+computador que executa Ollama. O Ollama também precisa aceitar conexões do
+container; restrinja essas conexões à rede confiável necessária.
 
 ## Executar como aplicativo no TrueNAS SCALE 24.10+
 
