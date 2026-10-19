@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 @dataclass(frozen=True)
 class Settings:
     truenas_url: str
+    truenas_username: str
     truenas_api_key: str
     truenas_ca_bundle: str
     ollama_model: str
@@ -20,6 +21,7 @@ class Settings:
 
         values = {
             "TRUENAS_URL": os.environ.get("TRUENAS_URL", "").rstrip("/"),
+            "TRUENAS_USERNAME": os.environ.get("TRUENAS_USERNAME", ""),
             "TRUENAS_API_KEY": os.environ.get("TRUENAS_API_KEY", ""),
             "TELEGRAM_BOT_TOKEN": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
             "TELEGRAM_ALLOWED_CHAT_ID": os.environ.get(
@@ -42,6 +44,7 @@ class Settings:
 
         return cls(
             truenas_url=values["TRUENAS_URL"],
+            truenas_username=values["TRUENAS_USERNAME"],
             truenas_api_key=values["TRUENAS_API_KEY"],
             truenas_ca_bundle=os.environ.get("TRUENAS_CA_BUNDLE", "").strip(),
             ollama_model=os.environ.get("OLLAMA_MODEL", "qwen3:1.7b"),

@@ -13,7 +13,8 @@ com o bot pela primeira vez.
 Em qualquer forma de instalação:
 
 - Um bot do Telegram e o token fornecido pelo BotFather.
-- Um servidor TrueNAS acessível pela rede e uma chave de API.
+- Um servidor TrueNAS acessível pela rede, o nome do usuário associado e uma
+  chave de API.
 - Ollama e um modelo compatível com chamadas de ferramentas.
 
 Para instalar no computador, você também precisa de Python 3.12 ou mais recente.
@@ -80,12 +81,19 @@ precisarem usar o bot, adicione os IDs delas à configuração.
 
 ## 4. Prepare o acesso ao TrueNAS
 
-No TrueNAS, crie uma chave de API e guarde-a. Você também precisará da URL usada
-para acessar a interface do TrueNAS, por exemplo `https://192.168.1.10`.
+No TrueNAS, crie uma chave de API para o usuário que o bot usará e guarde-a.
+Você também precisará do nome desse usuário e da URL usada para acessar a
+interface do TrueNAS, por exemplo `https://192.168.1.10`.
 
 Use HTTPS sempre que possível. Se o TrueNAS usar um certificado de uma
 autoridade certificadora privada, tenha o arquivo PEM dessa CA disponível para
-configurá-lo mais adiante.
+configurá-lo mais adiante. O cliente se conecta à API JSON-RPC 2.0 por
+WebSocket, evitando a API REST legada removida no TrueNAS 26.04.
+
+Se estiver atualizando uma instalação existente, adicione `TRUENAS_USERNAME`
+ao `.env` ou à configuração do Custom App. Informe o usuário associado à chave
+de API. Depois, atualize o código e reconstrua/republique a imagem Docker antes
+de recriar o container ou atualizar o aplicativo no TrueNAS.
 
 ## 5. Configure o arquivo `.env`
 
@@ -107,6 +115,7 @@ Abra `.env` em um editor de texto e substitua os valores de exemplo pelos seus:
 
 ```dotenv
 TRUENAS_URL=https://endereco-do-truenas
+TRUENAS_USERNAME=usuario_da_chave
 TRUENAS_API_KEY=sua_chave_de_api_do_truenas
 TRUENAS_CA_BUNDLE=
 TELEGRAM_BOT_TOKEN=token_fornecido_pelo_botfather
@@ -120,6 +129,7 @@ O significado de cada opção:
 | Opção | O que preencher |
 |---|---|
 | `TRUENAS_URL` | URL do seu TrueNAS, sem `/api` no final. |
+| `TRUENAS_USERNAME` | Nome do usuário do TrueNAS associado à chave de API. |
 | `TRUENAS_API_KEY` | Chave de API criada no TrueNAS. |
 | `TRUENAS_CA_BUNDLE` | Opcional. Caminho do certificado PEM da CA privada; deixe vazio se não precisar. |
 | `TELEGRAM_BOT_TOKEN` | Token fornecido pelo BotFather. |
@@ -127,9 +137,9 @@ O significado de cada opção:
 | `OLLAMA_MODEL` | Nome do modelo baixado no Ollama. O padrão é `qwen3:1.7b`. |
 | `OLLAMA_HOST` | Endereço do Ollama. Para execução local, mantenha o valor padrão. |
 
-Não coloque aspas em volta dos valores. O bot não inicia sem URL e chave do
-TrueNAS, token do Telegram e pelo menos um ID de chat permitido. Mantenha o
-arquivo `.env` privado: ele contém credenciais.
+Não coloque aspas em volta dos valores. O bot não inicia sem URL, usuário e
+chave do TrueNAS, token do Telegram e pelo menos um ID de chat permitido.
+Mantenha o arquivo `.env` privado: ele contém credenciais.
 
 ## 6. Instale as dependências do projeto
 
@@ -273,6 +283,7 @@ services:
       - ollama
     environment:
       TRUENAS_URL: "https://IP_OU_NOME_DO_TRUENAS"
+      TRUENAS_USERNAME: "USUARIO_DA_CHAVE"
       TRUENAS_API_KEY: "SUA_CHAVE_DE_API"
       TRUENAS_CA_BUNDLE: ""
       TELEGRAM_BOT_TOKEN: "TOKEN_DO_BOT"
@@ -333,8 +344,9 @@ outro computador e altere `OLLAMA_HOST` para o endereço desse serviço.
 - **Ollama indisponível ou modelo não encontrado:** verifique se Ollama está em
   execução, se `ollama list` mostra o modelo e se `OLLAMA_HOST` está correto.
 - **Falha ao acessar o TrueNAS:** confira a URL, a chave de API, a conexão de
-  rede e o certificado HTTPS. Para uma CA privada, configure
-  `TRUENAS_CA_BUNDLE` com o caminho do arquivo PEM.
+  rede e o certificado HTTPS. Confira também se `TRUENAS_USERNAME` é o usuário
+  associado à chave. Para uma CA privada, configure `TRUENAS_CA_BUNDLE` com o
+  caminho do arquivo PEM.
 - **Uma pergunta não obtém dados do TrueNAS:** mantenha o modelo compatível com
   chamadas de ferramentas e examine as mensagens de erro no terminal onde o
   bot está em execução.
