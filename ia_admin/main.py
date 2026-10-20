@@ -6,6 +6,7 @@ from ia_admin.infrastructure.ollama import OllamaClient
 from ia_admin.infrastructure.truenas import TrueNASClient
 from ia_admin.infrastructure.truenas_tools import build_tool_functions
 from ia_admin.interfaces.telegram_bot import TelegramBotAdapter
+from ia_admin.logging_utils import SecretRedactionFilter
 
 
 def main() -> None:
@@ -14,6 +15,11 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(message)s",
     )
     settings = Settings.load()
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        handler.addFilter(SecretRedactionFilter(settings.telegram_bot_token))
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     truenas = TrueNASClient(settings)
     agent = AgentService(
         allowed_chat_ids=settings.allowed_chat_ids,

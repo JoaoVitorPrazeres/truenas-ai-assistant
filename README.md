@@ -305,6 +305,8 @@ Preencha os valores de token e chave somente na configuração privada do
 aplicativo. Não publique o YAML preenchido nem o inclua no GitHub. Restrinja o
 bot a IDs de chat conhecidos e crie uma chave TrueNAS com apenas as permissões
 necessárias. Não é preciso publicar a porta `11434` do Ollama para a Internet.
+O bot remove o token do Telegram de mensagens de log e desativa os logs de
+requisição do cliente HTTP que poderiam incluir URLs autenticadas.
 
 Se o certificado HTTPS do TrueNAS for assinado por uma CA privada, monte o
 arquivo da CA no container do bot como volume somente leitura e defina
