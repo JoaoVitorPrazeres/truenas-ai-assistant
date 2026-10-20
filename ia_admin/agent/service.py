@@ -164,6 +164,14 @@ class AgentService:
 
 def direct_readonly_tool(text: str) -> str | None:
     normalized = text.casefold()
+    if re.search(r"\b(dataset|datasets)\b", normalized) and re.search(
+        r"\b(criar|crie|adicionar|adicione|novo|nova)\b", normalized
+    ):
+        return None
+    if re.search(r"\b(pool|pools|armazenamento|espaço em disco)\b", normalized):
+        return "get_pools"
+    if re.search(r"\b(dataset|datasets)\b", normalized):
+        return "get_datasets"
     if re.search(r"\b(cpu|processador|ram|mem[oó]ria)\b", normalized) and re.search(
         r"\b(uso|utiliza[cç][aã]o|consumo|ocupad[ao])\b", normalized
     ):
