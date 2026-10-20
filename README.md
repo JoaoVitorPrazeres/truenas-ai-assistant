@@ -85,11 +85,14 @@ No TrueNAS, crie uma chave de API para o usuário que o bot usará e guarde-a.
 Você também precisará do nome desse usuário e da URL usada para acessar a
 interface do TrueNAS, por exemplo `https://192.168.1.10`.
 
-Use HTTPS. O cliente exige HTTPS e não envia a chave de API por uma conexão
-HTTP. Se o TrueNAS usar um certificado de uma
-autoridade certificadora privada, tenha o arquivo PEM dessa CA disponível para
-configurá-lo mais adiante. O cliente se conecta à API JSON-RPC 2.0 por
-WebSocket, evitando a API REST legada removida no TrueNAS 26.04.
+Use HTTPS sempre que possível. Se o TrueNAS só estiver acessível por HTTP,
+informe `http://` em `TRUENAS_URL`; o cliente usará WebSocket sem TLS (`ws://`).
+Nesse modo, a chave de API e os dados trafegam sem criptografia. Use-o somente
+em uma rede local confiável e isolada, nunca pela Internet ou por Wi-Fi/rede
+pública. Se o TrueNAS usar um certificado de uma autoridade certificadora
+privada, tenha o arquivo PEM dessa CA disponível para configurá-lo. O cliente
+se conecta à API JSON-RPC 2.0 por WebSocket, evitando a API REST legada removida
+no TrueNAS 26.04.
 
 Se estiver atualizando uma instalação existente, adicione `TRUENAS_USERNAME`
 ao `.env` ou à configuração do Custom App. Informe o usuário associado à chave
@@ -296,11 +299,13 @@ volumes:
   ollama_data:
 ```
 
-Use no `TRUENAS_URL` o endereço HTTPS da interface de rede do próprio TrueNAS,
-por exemplo `https://192.168.1.50`. Não use `localhost` ou `127.0.0.1`: dentro
-do container esses endereços apontam para o próprio container, não para o
-TrueNAS. O serviço Ollama é acessado pelo nome `ollama` porque os dois
-containers estão na mesma rede do Compose.
+Use no `TRUENAS_URL` o endereço da interface de rede do próprio TrueNAS, de
+preferência HTTPS, por exemplo `https://192.168.1.50`. Se o seu TrueNAS só
+aceitar HTTP, use `http://192.168.1.50`; isso envia a chave sem criptografia e
+só deve ser usado em rede local confiável e isolada. Não use `localhost` ou
+`127.0.0.1`: dentro do container esses endereços apontam para o próprio
+container, não para o TrueNAS. O serviço Ollama é acessado pelo nome `ollama`
+porque os dois containers estão na mesma rede do Compose.
 
 Preencha os valores de token e chave somente na configuração privada do
 aplicativo. Não publique o YAML preenchido nem o inclua no GitHub. Restrinja o
