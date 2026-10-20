@@ -37,6 +37,10 @@ class FakeWebSocket:
 
 
 class TrueNASRpcTests(unittest.TestCase):
+    def test_client_rejects_http_to_protect_api_key(self) -> None:
+        with self.assertRaisesRegex(ExternalServiceError, "deve usar HTTPS"):
+            TrueNASClient(make_settings("http://nas.example.test"))
+
     def test_rpc_authenticates_and_calls_method_over_websocket(self) -> None:
         connection = FakeWebSocket([
             {

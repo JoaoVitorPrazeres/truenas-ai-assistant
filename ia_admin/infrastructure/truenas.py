@@ -22,13 +22,12 @@ def bytes_to_human(value: int | float | None) -> str | None:
 class TrueNASClient:
     def __init__(self, settings: Settings):
         parsed_url = urlsplit(settings.truenas_url)
-        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+        if parsed_url.scheme != "https" or not parsed_url.netloc:
             raise ExternalServiceError(
-                "TRUENAS_URL deve ser uma URL HTTP ou HTTPS válida"
+                "TRUENAS_URL deve usar HTTPS para proteger a chave de API"
             )
-        scheme = "wss" if parsed_url.scheme == "https" else "ws"
         self.websocket_url = urlunsplit(
-            (scheme, parsed_url.netloc, "/api/current", "", "")
+            ("wss", parsed_url.netloc, "/api/current", "", "")
         )
         self.username = settings.truenas_username
         self.api_key = settings.truenas_api_key

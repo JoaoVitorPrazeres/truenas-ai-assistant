@@ -85,7 +85,8 @@ No TrueNAS, crie uma chave de API para o usuário que o bot usará e guarde-a.
 Você também precisará do nome desse usuário e da URL usada para acessar a
 interface do TrueNAS, por exemplo `https://192.168.1.10`.
 
-Use HTTPS sempre que possível. Se o TrueNAS usar um certificado de uma
+Use HTTPS. O cliente exige HTTPS e não envia a chave de API por uma conexão
+HTTP. Se o TrueNAS usar um certificado de uma
 autoridade certificadora privada, tenha o arquivo PEM dessa CA disponível para
 configurá-lo mais adiante. O cliente se conecta à API JSON-RPC 2.0 por
 WebSocket, evitando a API REST legada removida no TrueNAS 26.04.
