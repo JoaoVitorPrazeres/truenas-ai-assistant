@@ -1,5 +1,4 @@
 import json
-import logging
 import ssl
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -8,9 +7,6 @@ import websocket
 
 from ia_admin.config import Settings
 from ia_admin.infrastructure.http_client import ExternalServiceError
-
-
-log = logging.getLogger("ia-admin-telegram")
 
 
 def bytes_to_human(value: int | float | None) -> str | None:
@@ -26,14 +22,13 @@ def bytes_to_human(value: int | float | None) -> str | None:
 class TrueNASClient:
     def __init__(self, settings: Settings):
         parsed_url = urlsplit(settings.truenas_url)
-        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+        if parsed_url.scheme != "https" or not parsed_url.netloc:
             raise ExternalServiceError(
-                "TRUENAS_URL deve usar HTTP ou HTTPS e incluir o endereço do TrueNAS"
+                "TRUENAS_URL deve usar HTTPS e incluir o endereço do TrueNAS"
             )
-        self.is_secure = parsed_url.scheme == "https"
         self.websocket_url = urlunsplit(
             (
-                "wss" if self.is_secure else "ws",
+                "wss",
                 parsed_url.netloc,
                 "/api/current",
                 "",
@@ -48,11 +43,6 @@ class TrueNASClient:
         }
         if settings.truenas_ca_bundle:
             self.ssl_options["ca_certs"] = settings.truenas_ca_bundle
-        if not self.is_secure:
-            log.warning(
-                "TRUENAS_URL usa HTTP: a chave de API e os dados trafegam "
-                "sem criptografia. Use apenas em uma rede confiável."
-            )
 
     @staticmethod
     def _receive_result(
@@ -87,12 +77,10 @@ class TrueNASClient:
     def _rpc(self, method: str, params: list[Any] | None = None) -> Any:
         connection: websocket.WebSocket | None = None
         try:
-            connection_options: dict[str, Any] = {"timeout": 30}
-            if self.is_secure:
-                connection_options["sslopt"] = self.ssl_options
             connection = websocket.create_connection(
                 self.websocket_url,
-                **connection_options,
+                timeout=30,
+                sslopt=self.ssl_options,
             )
             connection.send(json.dumps({
                 "jsonrpc": "2.0",

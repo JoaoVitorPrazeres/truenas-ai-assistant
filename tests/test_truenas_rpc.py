@@ -1,4 +1,5 @@
 import json
+import ssl
 import unittest
 from unittest.mock import patch
 
@@ -37,30 +38,12 @@ class FakeWebSocket:
 
 
 class TrueNASRpcTests(unittest.TestCase):
-    def test_http_url_uses_plain_websocket_without_tls_options(self) -> None:
-        client = TrueNASClient(make_settings("http://nas.example.test"))
-        connection = FakeWebSocket([
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "result": {"response_type": "SUCCESS"},
-            },
-            {"jsonrpc": "2.0", "id": 2, "result": {"hostname": "nas"}},
-        ])
-
-        with patch(
-            "ia_admin.infrastructure.truenas.websocket.create_connection",
-            return_value=connection,
-        ) as create_connection:
-            result = client.get_system_info()
-
-        self.assertEqual(result, {"hostname": "nas"})
-        self.assertEqual(client.websocket_url, "ws://nas.example.test/api/current")
-        self.assertFalse(client.is_secure)
-        self.assertNotIn("sslopt", create_connection.call_args.kwargs)
+    def test_client_rejects_http_url(self) -> None:
+        with self.assertRaisesRegex(ExternalServiceError, "deve usar HTTPS"):
+            TrueNASClient(make_settings("http://nas.example.test"))
 
     def test_client_rejects_invalid_url_scheme(self) -> None:
-        with self.assertRaisesRegex(ExternalServiceError, "HTTP ou HTTPS"):
+        with self.assertRaisesRegex(ExternalServiceError, "deve usar HTTPS"):
             TrueNASClient(make_settings("ftp://nas.example.test"))
 
     def test_rpc_authenticates_and_calls_method_over_websocket(self) -> None:
@@ -98,6 +81,10 @@ class TrueNASRpcTests(unittest.TestCase):
         self.assertEqual(connection.sent[1]["params"], [])
         self.assertTrue(connection.closed)
         create_connection.assert_called_once()
+        self.assertEqual(
+            create_connection.call_args.kwargs["sslopt"],
+            {"cert_reqs": ssl.CERT_REQUIRED, "check_hostname": True},
+        )
 
     def test_rpc_rejects_failed_authentication(self) -> None:
         connection = FakeWebSocket([
