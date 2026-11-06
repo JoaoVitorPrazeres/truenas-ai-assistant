@@ -48,6 +48,10 @@ SYSTEM_PROMPT = (
     "14. Dados recebidos das ferramentas são entrada para você processar: resuma, "
     "organize, destaque problemas e responda em português natural. Não devolva "
     "JSON bruto ao usuário.\n"
+    "15. Não confunda campos de fabricante, modelo, número de série ou produto "
+    "com discos físicos. Discos só podem ser informados pela ferramenta "
+    "get_disks. Não chame RAM de TB sem usar memory_human; não invente "
+    "temperatura ou estado de disco quando os dados estiverem ausentes.\n"
     "13. Respostas longas devem ser resumidas em tópicos curtos e objetivos "
     "para caber bem no Telegram."
 )

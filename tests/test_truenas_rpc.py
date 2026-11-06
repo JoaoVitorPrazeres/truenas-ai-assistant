@@ -65,7 +65,7 @@ class TrueNASRpcTests(unittest.TestCase):
         ) as create_connection:
             result = client.get_system_info()
 
-        self.assertEqual(result, {"hostname": "nas"})
+        self.assertEqual(result["hostname"], "nas")
         self.assertEqual(client.websocket_url, "wss://nas.example.test/api/current")
         self.assertEqual(
             connection.sent[0]["method"],
@@ -140,6 +140,27 @@ class TrueNASRpcTests(unittest.TestCase):
                 "aggregate": True,
             }],
         )
+
+    def test_system_info_is_normalized_without_disk_fields(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(return_value={
+            "hostname": "truenas",
+            "version": "25.10.4",
+            "uptime_seconds": 5026.28,
+            "cpu_model": "Intel i5-8400T",
+            "cores": 6,
+            "physmem": 7710375936,
+            "loadavg": [0.69, 0.80, 0.54],
+        })
+
+        result = client.get_system_info()
+
+        self.assertEqual(result["hostname"], "truenas")
+        self.assertEqual(result["uptime_human"], "1 hora, 23 minutos, 46 segundos")
+        self.assertEqual(result["cpu_cores"], 6)
+        self.assertEqual(result["memory_human"], "7.18 GiB")
+        self.assertNotIn("disks", result)
+        self.assertNotIn("disk_temperature", result)
 
     def test_write_operations_use_jsonrpc_methods_and_parameters(self) -> None:
         client = TrueNASClient(make_settings())
@@ -318,7 +339,7 @@ class TrueNASRpcTests(unittest.TestCase):
         ):
             result = client.get_system_info()
 
-        self.assertEqual(result, {"hostname": "nas"})
+        self.assertEqual(result["hostname"], "nas")
         self.assertTrue(broken.close.called)
         self.assertEqual(replacement.sent[-1]["method"], "system.info")
         client.close()

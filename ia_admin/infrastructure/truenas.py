@@ -20,6 +20,15 @@ def bytes_to_human(value: int | float | None) -> str | None:
     return f"{round(gb, 2)} GB"
 
 
+def memory_bytes_to_human(value: int | float | None) -> str | None:
+    if not isinstance(value, (int, float)) or value < 0:
+        return None
+    gib = float(value) / (1024 ** 3)
+    if gib >= 1024:
+        return f"{round(gib / 1024, 2)} TiB"
+    return f"{round(gib, 2)} GiB"
+
+
 class TrueNASClient:
     def __init__(self, settings: Settings, persistent: bool = False):
         parsed_url = urlsplit(settings.truenas_url)
@@ -240,7 +249,78 @@ class TrueNASClient:
             self._close_connection()
 
     def get_system_info(self) -> Any:
-        return self._rpc("system.info")
+        data = self._rpc("system.info")
+        if not isinstance(data, dict):
+            raise ExternalServiceError(
+                "TrueNAS retornou um formato inesperado para system.info"
+            )
+
+        uptime_seconds = (
+            data.get("uptime_seconds")
+            or data.get("uptime")
+        )
+        if isinstance(uptime_seconds, dict):
+            uptime_seconds = uptime_seconds.get("seconds")
+        if isinstance(uptime_seconds, str):
+            try:
+                uptime_seconds = float(uptime_seconds)
+            except ValueError:
+                uptime_seconds = None
+
+        uptime_human = None
+        if isinstance(uptime_seconds, (int, float)):
+            total_seconds = int(uptime_seconds)
+            days, remainder = divmod(total_seconds, 86400)
+            hours, remainder = divmod(remainder, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            parts = []
+            if days:
+                parts.append(f"{days} dia{'s' if days != 1 else ''}")
+            if hours or days:
+                parts.append(f"{hours} hora{'s' if hours != 1 else ''}")
+            if minutes or hours or days:
+                parts.append(f"{minutes} minuto{'s' if minutes != 1 else ''}")
+            parts.append(f"{seconds} segundo{'s' if seconds != 1 else ''}")
+            uptime_human = ", ".join(parts)
+
+        memory_bytes = (
+            data.get("physmem")
+            or data.get("physical_memory")
+            or data.get("memory_size")
+            or data.get("total_memory")
+        )
+        cpu_cores = (
+            data.get("cores")
+            or data.get("physical_cores")
+            or data.get("cpu_cores")
+        )
+        loadavg = data.get("loadavg")
+        if not isinstance(loadavg, list):
+            loadavg = None
+
+        return {
+            "hostname": data.get("hostname"),
+            "version": data.get("version") or data.get("system_version"),
+            "uptime_seconds": uptime_seconds,
+            "uptime_human": uptime_human,
+            "cpu_model": (
+                data.get("cpu_model")
+                or data.get("model")
+                or data.get("cpu_name")
+            ),
+            "cpu_cores": cpu_cores,
+            "cpu_clock_mhz": (
+                data.get("cpu_speed")
+                or data.get("cpu_clock_mhz")
+            ),
+            "memory_bytes": memory_bytes,
+            "memory_human": memory_bytes_to_human(memory_bytes),
+            "load_average": loadavg,
+            "ecc_memory": data.get("ecc_memory"),
+            "system_manufacturer": data.get("system_manufacturer"),
+            "system_product_name": data.get("system_product_name"),
+            "system_serial_number": data.get("system_serial_number"),
+        }
 
     def get_pools(self) -> list[dict[str, Any]]:
         pools = self._require_dict_list(self._rpc("pool.query"), "pool.query")
