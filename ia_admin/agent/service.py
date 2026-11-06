@@ -232,6 +232,10 @@ def direct_readonly_tool(text: str) -> str | None:
         r"\b(criar|crie|adicionar|adicione|novo|nova)\b", normalized
     ):
         return None
+    if re.search(r"\b(ip|endere[cç]o ip|endere[cç]os ip)\b", normalized):
+        if re.search(r"\bgateway|dns|servidor dns", normalized):
+            return "get_network_configuration"
+        return "get_network_interfaces"
     if re.search(r"\b(pool|pools|armazenamento|espaço em disco)\b", normalized):
         return "get_pools"
     if re.search(r"\b(dataset|datasets)\b", normalized):

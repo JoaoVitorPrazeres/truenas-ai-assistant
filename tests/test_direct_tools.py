@@ -34,6 +34,7 @@ class DirectReadonlyToolTests(unittest.TestCase):
             ("Quais portas utilizadas pelos apps?", "get_app_ports"),
             ("Existe algum alerta ativo?", "get_alerts"),
             ("Qual a versão do TrueNAS?", "get_system_info"),
+            ("Qual é o IP do servidor?", "get_network_interfaces"),
         )
         for question, expected in cases:
             with self.subTest(question=question):

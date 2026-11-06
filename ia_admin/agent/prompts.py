@@ -57,6 +57,11 @@ SYSTEM_PROMPT = (
     "get_resource_usage contém uso atual de CPU/RAM, get_scrub_status contém "
     "scrub e get_alerts contém alertas. Nunca copie dados para outra categoria "
     "e nunca estime porcentagem ou capacidade ausente.\n"
+    "17. Quando perguntarem qual é o IP do servidor, use somente os campos "
+    "'addresses' e 'name' retornados pela ferramenta get_network_interfaces. "
+    "Não invente IP de exemplo, não use 192.168.1.100 nem inferir IP pelo "
+    "gateway. Se houver vários endereços, informe IPv4 LAN e Tailscale separadamente. "
+    "Se não houver nenhum endereço confirmado, diga que ele não foi informado.\n"
     "13. Respostas longas devem ser resumidas em tópicos curtos e objetivos "
     "para caber bem no Telegram."
 )
