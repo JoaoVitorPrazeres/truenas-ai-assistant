@@ -297,6 +297,32 @@ class TrueNASRpcTests(unittest.TestCase):
         )
         self.assertTrue(connection.closed)
 
+    def test_persistent_mode_reconnects_after_broken_pipe(self) -> None:
+        broken = unittest.mock.Mock()
+        broken.send.side_effect = BrokenPipeError("Broken pipe")
+
+        replacement = FakeWebSocket([
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"response_type": "SUCCESS"},
+            },
+            {"jsonrpc": "2.0", "id": 2, "result": {"hostname": "nas"}},
+        ])
+        client = TrueNASClient(make_settings(), persistent=True)
+        client._connection = broken
+
+        with patch(
+            "ia_admin.infrastructure.truenas.websocket.create_connection",
+            return_value=replacement,
+        ):
+            result = client.get_system_info()
+
+        self.assertEqual(result, {"hostname": "nas"})
+        self.assertTrue(broken.close.called)
+        self.assertEqual(replacement.sent[-1]["method"], "system.info")
+        client.close()
+
     def test_temperature_alerts_interfaces_apps_and_updates(self) -> None:
         client = TrueNASClient(make_settings())
 

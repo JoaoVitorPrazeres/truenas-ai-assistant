@@ -210,9 +210,28 @@ class TrueNASClient:
                 raise
             except (websocket.WebSocketException, OSError, TimeoutError) as exc:
                 self._close_connection()
-                raise ExternalServiceError(
-                    f"Não foi possível conectar à API WebSocket do TrueNAS: {exc}"
-                ) from exc
+                try:
+                    connection = self._connect_and_authenticate()
+                    connection.send(json.dumps({
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": method,
+                        "params": params or [],
+                    }))
+                    return self._receive_result(connection, 2, method)
+                except ExternalServiceError:
+                    self._close_connection()
+                    raise
+                except (
+                    websocket.WebSocketException,
+                    OSError,
+                    TimeoutError,
+                ) as retry_exc:
+                    self._close_connection()
+                    raise ExternalServiceError(
+                        "Não foi possível conectar à API WebSocket do TrueNAS "
+                        f"mesmo após reconectar: {retry_exc}"
+                    ) from retry_exc
 
     def close(self) -> None:
         if not self.persistent:
