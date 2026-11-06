@@ -112,6 +112,8 @@ class AgentService:
             )
             if direct_tool == "get_disk_temperatures" and result == []:
                 result = "O TrueNAS não forneceu temperaturas de discos ou sensores."
+            if direct_tool == "get_network_interfaces":
+                return AgentResponse(format_direct_result(direct_tool, result))
             messages = self.conversations.setdefault(
                 chat_id, [{"role": "system", "content": SYSTEM_PROMPT}]
             )

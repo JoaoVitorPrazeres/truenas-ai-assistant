@@ -1,9 +1,25 @@
 import unittest
 
-from ia_admin.agent.service import AgentService, direct_readonly_tool
+from ia_admin.agent.service import (
+    AgentService,
+    direct_readonly_tool,
+    format_direct_result,
+)
 
 
 class DirectReadonlyToolTests(unittest.TestCase):
+    def test_network_interface_result_is_not_replaced_by_example_ip(self) -> None:
+        result = [{
+            "name": "enp2s0f1",
+            "state": "UP",
+            "addresses": ["192.168.100.34"],
+        }]
+
+        formatted = format_direct_result("get_network_interfaces", result)
+
+        self.assertIn("192.168.100.34", formatted)
+        self.assertNotIn("192.168.1.100", formatted)
+
     def test_storage_and_pool_questions_call_get_pools(self) -> None:
         for question in (
             "Quais são os pools do servidor?",
@@ -42,6 +58,28 @@ class DirectReadonlyToolTests(unittest.TestCase):
 
 
 class OllamaFormattingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ip_question_uses_only_confirmed_interface_addresses(self) -> None:
+        class UnexpectedOllamaCall:
+            def chat(self, messages, tools):
+                raise AssertionError("IPs confirmados não devem passar pelo modelo")
+
+        service = AgentService(
+            allowed_chat_ids=frozenset({"123"}),
+            ollama=UnexpectedOllamaCall(),
+            tool_functions={
+                "get_network_interfaces": lambda: [{
+                    "name": "enp2s0f1",
+                    "state": "UP",
+                    "addresses": ["192.168.100.34"],
+                }],
+            },
+        )
+
+        response = await service.answer(123, "Qual é o IP do servidor?")
+
+        self.assertIn("192.168.100.34", response.text)
+        self.assertNotIn("192.168.1.100", response.text)
+
     async def test_direct_tool_result_is_formatted_by_ollama(self) -> None:
         class FakeOllama:
             def __init__(self) -> None:
