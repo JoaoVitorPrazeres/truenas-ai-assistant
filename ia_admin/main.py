@@ -20,7 +20,7 @@ def main() -> None:
         handler.addFilter(SecretRedactionFilter(settings.telegram_bot_token))
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    truenas = TrueNASClient(settings)
+    truenas = TrueNASClient(settings, persistent=True)
     agent = AgentService(
         allowed_chat_ids=settings.allowed_chat_ids,
         ollama=OllamaClient(settings),
@@ -30,4 +30,7 @@ def main() -> None:
     logging.getLogger("ia-admin-telegram").info(
         "Bot iniciado. Aguardando mensagens..."
     )
-    app.run_polling()
+    try:
+        app.run_polling()
+    finally:
+        truenas.close()

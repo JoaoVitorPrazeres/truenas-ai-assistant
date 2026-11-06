@@ -1,5 +1,6 @@
 import json
 import ssl
+from threading import RLock
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -20,7 +21,7 @@ def bytes_to_human(value: int | float | None) -> str | None:
 
 
 class TrueNASClient:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, persistent: bool = False):
         parsed_url = urlsplit(settings.truenas_url)
         if parsed_url.scheme != "https" or not parsed_url.netloc:
             raise ExternalServiceError(
@@ -43,6 +44,9 @@ class TrueNASClient:
         }
         if settings.truenas_ca_bundle:
             self.ssl_options["ca_certs"] = settings.truenas_ca_bundle
+        self.persistent = persistent
+        self._connection: websocket.WebSocket | None = None
+        self._connection_lock = RLock()
 
     @staticmethod
     def _receive_result(
@@ -50,7 +54,7 @@ class TrueNASClient:
     ) -> Any:
         try:
             response = json.loads(connection.recv())
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as exc:
             raise ExternalServiceError(
                 f"TrueNAS retornou uma resposta JSON inválida para {method}"
             ) from exc
@@ -74,7 +78,65 @@ class TrueNASClient:
             )
         return response["result"]
 
+    def _close_connection(self) -> None:
+        connection = self._connection
+        self._connection = None
+        if connection is not None:
+            try:
+                connection.close()
+            except (websocket.WebSocketException, OSError):
+                pass
+
+    def _connect_and_authenticate(self) -> websocket.WebSocket:
+        connection = websocket.create_connection(
+            self.websocket_url,
+            timeout=30,
+            sslopt=self.ssl_options,
+        )
+        self._connection = connection
+        connection.send(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "auth.login_ex",
+            "params": [{
+                "mechanism": "API_KEY_PLAIN",
+                "username": self.username,
+                "api_key": self.api_key,
+            }],
+        }))
+        authentication = self._receive_result(
+            connection, 1, "auth.login_ex"
+        )
+        if (
+            not isinstance(authentication, dict)
+            or authentication.get("response_type") != "SUCCESS"
+        ):
+            response_type = (
+                authentication.get("response_type")
+                if isinstance(authentication, dict)
+                else "resposta inválida"
+            )
+            raise ExternalServiceError(
+                f"Autenticação no TrueNAS falhou ({response_type}); "
+                "confira TRUENAS_USERNAME e TRUENAS_API_KEY"
+            )
+        return connection
+
+    def _require_dict_list(self, value: Any, method: str) -> list[dict[str, Any]]:
+        if not isinstance(value, list):
+            raise ExternalServiceError(
+                f"TrueNAS retornou uma lista inválida para {method}"
+            )
+        if not all(isinstance(item, dict) for item in value):
+            raise ExternalServiceError(
+                f"TrueNAS retornou um item inválido para {method}"
+            )
+        return value
+
     def _rpc(self, method: str, params: list[Any] | None = None) -> Any:
+        if self.persistent:
+            return self._rpc_persistent(method, params)
+
         connection: websocket.WebSocket | None = None
         try:
             connection = websocket.create_connection(
@@ -122,13 +184,47 @@ class TrueNASClient:
             ) from exc
         finally:
             if connection is not None:
-                connection.close()
+                try:
+                    connection.close()
+                except (websocket.WebSocketException, OSError):
+                    pass
+
+    def _rpc_persistent(
+        self, method: str, params: list[Any] | None = None
+    ) -> Any:
+        with self._connection_lock:
+            try:
+                connection = self._connection
+                if connection is None:
+                    connection = self._connect_and_authenticate()
+
+                connection.send(json.dumps({
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": method,
+                    "params": params or [],
+                }))
+                return self._receive_result(connection, 2, method)
+            except ExternalServiceError:
+                self._close_connection()
+                raise
+            except (websocket.WebSocketException, OSError, TimeoutError) as exc:
+                self._close_connection()
+                raise ExternalServiceError(
+                    f"Não foi possível conectar à API WebSocket do TrueNAS: {exc}"
+                ) from exc
+
+    def close(self) -> None:
+        if not self.persistent:
+            return
+        with self._connection_lock:
+            self._close_connection()
 
     def get_system_info(self) -> Any:
         return self._rpc("system.info")
 
     def get_pools(self) -> list[dict[str, Any]]:
-        pools = self._rpc("pool.query")
+        pools = self._require_dict_list(self._rpc("pool.query"), "pool.query")
         result = []
         for pool in pools:
             size = pool.get("size") or 0
@@ -148,7 +244,9 @@ class TrueNASClient:
         return result
 
     def get_datasets(self) -> list[dict[str, Any]]:
-        datasets = self._rpc("pool.dataset.query")
+        datasets = self._require_dict_list(
+            self._rpc("pool.dataset.query"), "pool.dataset.query"
+        )
 
         def flatten(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             result = []
@@ -225,7 +323,9 @@ class TrueNASClient:
                 "type": disk.get("type"),
                 "serial": disk.get("serial"),
             }
-            for disk in self._rpc("disk.query")
+            for disk in self._require_dict_list(
+                self._rpc("disk.query"), "disk.query"
+            )
         ]
 
     def get_services(self) -> list[dict[str, Any]]:
@@ -235,7 +335,9 @@ class TrueNASClient:
                 "state": service.get("state"),
                 "enable": service.get("enable"),
             }
-            for service in self._rpc("service.query")
+            for service in self._require_dict_list(
+                self._rpc("service.query"), "service.query"
+            )
         ]
 
     def restart_service(self, service_name: str) -> Any:
@@ -255,11 +357,15 @@ class TrueNASClient:
                 "dismissed": alert.get("dismissed"),
                 "datetime": (alert.get("datetime") or {}).get("$date"),
             }
-            for alert in self._rpc("alert.list")
+            for alert in self._require_dict_list(
+                self._rpc("alert.list"), "alert.list"
+            )
         ]
 
     def get_disk_temperatures(self) -> list[dict[str, Any]]:
-        disks = self._rpc("disk.query")
+        disks = self._require_dict_list(
+            self._rpc("disk.query"), "disk.query"
+        )
         names = [disk.get("name") for disk in disks if disk.get("name")]
         if not names:
             return []
@@ -286,11 +392,16 @@ class TrueNASClient:
         ]
 
     def get_disk_temperature_alerts(self) -> list[dict[str, Any]]:
-        disks = self._rpc("disk.query")
+        disks = self._require_dict_list(
+            self._rpc("disk.query"), "disk.query"
+        )
         names = [disk.get("name") for disk in disks if disk.get("name")]
         if not names:
             return []
-        alerts = self._rpc("disk.temperature_alerts", [names])
+        alerts = self._require_dict_list(
+            self._rpc("disk.temperature_alerts", [names]),
+            "disk.temperature_alerts",
+        )
         return [
             {
                 "id": alert.get("id"),
@@ -313,10 +424,15 @@ class TrueNASClient:
                 "percentage": (pool.get("scan") or {}).get("percentage"),
                 "errors": (pool.get("scan") or {}).get("errors"),
             }
-            for pool in self._rpc("pool.query")
+            for pool in self._require_dict_list(
+                self._rpc("pool.query"), "pool.query"
+            )
         ]
 
     def get_network_interfaces(self) -> list[dict[str, Any]]:
+        interfaces = self._require_dict_list(
+            self._rpc("interface.query"), "interface.query"
+        )
         return [
             {
                 "name": interface.get("name"),
@@ -328,8 +444,7 @@ class TrueNASClient:
                     if address.get("address")
                 ],
             }
-            for interface in self._rpc("interface.query")
-            if isinstance(interface, dict)
+            for interface in interfaces
         ]
 
     def get_update_status(self) -> Any:
@@ -342,5 +457,7 @@ class TrueNASClient:
                 "state": app.get("state"),
                 "version": (app.get("metadata") or {}).get("app_version"),
             }
-            for app in self._rpc("app.query")
+            for app in self._require_dict_list(
+                self._rpc("app.query"), "app.query"
+            )
         ]

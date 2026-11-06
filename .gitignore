@@ -20,3 +20,6 @@ htmlcov/
 .idea/
 .vscode/
 *.log
+
+# Generated Graphify outputs
+graphify-out/

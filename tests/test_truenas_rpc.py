@@ -3,6 +3,8 @@ import ssl
 import unittest
 from unittest.mock import patch
 
+import websocket
+
 from ia_admin.config import Settings
 from ia_admin.infrastructure.http_client import ExternalServiceError
 from ia_admin.infrastructure.truenas import TrueNASClient
@@ -156,6 +158,168 @@ class TrueNASRpcTests(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_receive_result_rejects_invalid_json(self) -> None:
+        connection = unittest.mock.Mock()
+        connection.recv.return_value = "{not-json"
+
+        with self.assertRaisesRegex(
+            ExternalServiceError, "resposta JSON inválida"
+        ):
+            TrueNASClient._receive_result(connection, 2, "system.info")
+
+    def test_receive_result_rejects_mismatched_request_id(self) -> None:
+        connection = unittest.mock.Mock()
+        connection.recv.return_value = json.dumps({"jsonrpc": "2.0", "id": 99, "result": {}})
+
+        with self.assertRaisesRegex(
+            ExternalServiceError, "resposta inesperada"
+        ):
+            TrueNASClient._receive_result(connection, 2, "system.info")
+
+    def test_receive_result_rejects_jsonrpc_error(self) -> None:
+        connection = unittest.mock.Mock()
+        connection.recv.return_value = json.dumps({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "error": {"message": "Método não encontrado", "data": {"reason": "unknown method"}},
+        })
+
+        with self.assertRaisesRegex(
+            ExternalServiceError,
+            "unknown method",
+        ):
+            TrueNASClient._receive_result(connection, 2, "system.info")
+
+    def test_receive_result_rejects_missing_result(self) -> None:
+        connection = unittest.mock.Mock()
+        connection.recv.return_value = json.dumps({"jsonrpc": "2.0", "id": 2})
+
+        with self.assertRaisesRegex(
+            ExternalServiceError, "não retornou resultado"
+        ):
+            TrueNASClient._receive_result(connection, 2, "system.info")
+
+    def test_rpc_reports_websocket_network_error(self) -> None:
+        client = TrueNASClient(make_settings())
+
+        with patch(
+            "ia_admin.infrastructure.truenas.websocket.create_connection",
+            side_effect=websocket.WebSocketException("connection closed"),
+        ):
+            with self.assertRaisesRegex(
+                ExternalServiceError, "WebSocket do TrueNAS"
+            ):
+                client.get_system_info()
+
+    def test_rpc_reports_timeout(self) -> None:
+        client = TrueNASClient(make_settings())
+
+        with patch(
+            "ia_admin.infrastructure.truenas.websocket.create_connection",
+            side_effect=TimeoutError("timed out"),
+        ):
+            with self.assertRaisesRegex(
+                ExternalServiceError, "WebSocket do TrueNAS"
+            ):
+                client.get_system_info()
+
+    def test_list_methods_reject_unexpected_format(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(return_value={"not": "a list"})
+
+        for method in (
+            client.get_pools,
+            client.get_disks,
+            client.get_services,
+            client.get_alerts,
+            client.get_scrub_status,
+            client.get_network_interfaces,
+            client.get_apps,
+        ):
+            with self.subTest(method=method.__name__):
+                with self.assertRaisesRegex(
+                    ExternalServiceError, "lista inválida"
+                ):
+                    method()
+
+    def test_list_methods_reject_non_dict_items(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(return_value=["invalid"])
+
+        with self.assertRaisesRegex(
+            ExternalServiceError, "item inválido"
+        ):
+            client.get_pools()
+
+    def test_secondary_rpc_methods_build_params(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(side_effect=[
+            [{"name": "sda"}],
+            [{"name": "sda", "temperature": 38, "unit": "C"}],
+        ])
+
+        result = client.get_disk_temperatures()
+        self.assertEqual(
+            result,
+            [{"name": "sda", "temperature": 38, "unit": "C"}],
+        )
+        self.assertEqual(
+            client._rpc.call_args_list[1],
+            unittest.mock.call("disk.temperatures", [["sda"]]),
+        )
+
+        client._rpc = unittest.mock.Mock(return_value=[
+            {"level": "WARNING", "formatted": "Disk hot", "dismissed": False}
+        ])
+        self.assertEqual(client.get_alerts()[0]["level"], "WARNING")
+
+    def test_persistent_mode_authenticates_once_for_multiple_calls(self) -> None:
+        connection = FakeWebSocket([
+            {"jsonrpc": "2.0", "id": 1, "result": {"response_type": "SUCCESS"}},
+            {"jsonrpc": "2.0", "id": 2, "result": {"hostname": "nas-one"}},
+            {"jsonrpc": "2.0", "id": 2, "result": {"hostname": "nas-two"}},
+        ])
+        client = TrueNASClient(make_settings(), persistent=True)
+
+        with patch(
+            "ia_admin.infrastructure.truenas.websocket.create_connection",
+            return_value=connection,
+        ) as create_connection:
+            self.assertEqual(client.get_system_info()["hostname"], "nas-one")
+            self.assertEqual(client.get_system_info()["hostname"], "nas-two")
+            client.close()
+
+        self.assertEqual(create_connection.call_count, 1)
+        self.assertEqual(
+            sum(1 for message in connection.sent if message["method"] == "auth.login_ex"),
+            1,
+        )
+        self.assertTrue(connection.closed)
+
+    def test_temperature_alerts_interfaces_apps_and_updates(self) -> None:
+        client = TrueNASClient(make_settings())
+
+        with unittest.mock.patch.object(
+            client,
+            "_rpc",
+            side_effect=[
+                [{"name": "sda"}],
+                [{"id": 1, "level": "WARNING", "formatted": "Hot disk"}],
+                [],
+                [{"name": "plex", "state": "RUNNING", "metadata": {"app_version": "1.0"}}],
+                [{"version": "24.10.2"}],
+            ],
+        ):
+            alerts = client.get_disk_temperature_alerts()
+            interfaces = client.get_network_interfaces()
+            apps = client.get_apps()
+            updates = client.get_update_status()
+
+        self.assertEqual(alerts[0]["formatted"], "Hot disk")
+        self.assertEqual(interfaces, [])
+        self.assertEqual(apps[0]["version"], "1.0")
+        self.assertEqual(updates, [{"version": "24.10.2"}])
 
 
 if __name__ == "__main__":
