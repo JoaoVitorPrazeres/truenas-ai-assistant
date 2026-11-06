@@ -62,6 +62,49 @@ class AgentService:
                 "Você tem uma ação pendente de confirmação. Use os botões acima."
             )
 
+        if re.search(
+            r"\b(resumo|estado geral|situa[cç][aã]o geral|diagn[oó]stico)\b.*\b(servidor|sistema|truenas)\b"
+            r"|\b(servidor|sistema|truenas)\b.*\b(resumo|estado geral|situa[cç][aã]o geral|diagn[oó]stico)\b",
+            text.casefold(),
+        ):
+            tool_names = (
+                "get_system_info",
+                "get_resource_usage",
+                "get_pools",
+                "get_disks",
+                "get_disk_temperatures",
+                "get_alerts",
+                "get_scrub_status",
+            )
+            combined = {}
+            for tool_name in tool_names:
+                result = await asyncio.to_thread(
+                    execute_tool, tool_name, {}, self.tool_functions
+                )
+                combined[tool_name] = result
+            messages = self.conversations.setdefault(
+                chat_id, [{"role": "system", "content": SYSTEM_PROMPT}]
+            )
+            messages.append({"role": "user", "content": text})
+            messages.append({
+                "role": "tool",
+                "content": json.dumps(combined, ensure_ascii=False),
+            })
+            try:
+                reply = await asyncio.to_thread(
+                    self.ollama.chat, messages, []
+                )
+            except Exception as exc:
+                return AgentResponse(
+                    f"Não foi possível formatar os dados pelo Ollama. Erro: {exc}"
+                )
+            content = reply.get("content", "").strip()
+            messages.append({"role": "assistant", "content": content})
+            self.conversations[chat_id] = trim_conversation(messages)
+            return AgentResponse(
+                content or "O Ollama não conseguiu gerar uma resposta."
+            )
+
         direct_tool = direct_readonly_tool(text)
         if direct_tool:
             result = await asyncio.to_thread(

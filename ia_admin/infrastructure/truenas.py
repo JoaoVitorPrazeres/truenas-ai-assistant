@@ -315,6 +315,8 @@ class TrueNASClient:
             ),
             "memory_bytes": memory_bytes,
             "memory_human": memory_bytes_to_human(memory_bytes),
+            "memory_total_bytes": memory_bytes,
+            "memory_total_human": memory_bytes_to_human(memory_bytes),
             "load_average": loadavg,
             "ecc_memory": data.get("ecc_memory"),
             "system_manufacturer": data.get("system_manufacturer"),

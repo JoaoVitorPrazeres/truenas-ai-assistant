@@ -74,6 +74,47 @@ class OllamaFormattingTests(unittest.IsolatedAsyncioTestCase):
             "tool",
         )
 
+    async def test_broad_status_query_uses_multiple_tools(self) -> None:
+        class FakeOllama:
+            def __init__(self) -> None:
+                self.messages = None
+
+            def chat(self, messages, tools):
+                self.messages = messages
+                return {"content": "Resumo validado do servidor."}
+
+        called = []
+
+        def make_function(name):
+            def function():
+                called.append(name)
+                return {"status": name}
+            return function
+
+        ollama = FakeOllama()
+        tool_names = (
+            "get_system_info",
+            "get_resource_usage",
+            "get_pools",
+            "get_disks",
+            "get_disk_temperatures",
+            "get_alerts",
+            "get_scrub_status",
+        )
+        service = AgentService(
+            allowed_chat_ids=frozenset({"123"}),
+            ollama=ollama,
+            tool_functions={name: make_function(name) for name in tool_names},
+        )
+
+        response = await service.answer(
+            123,
+            "Faça um resumo do estado geral do servidor",
+        )
+
+        self.assertEqual(response.text, "Resumo validado do servidor.")
+        self.assertEqual(set(called), set(tool_names))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -52,6 +52,11 @@ SYSTEM_PROMPT = (
     "com discos físicos. Discos só podem ser informados pela ferramenta "
     "get_disks. Não chame RAM de TB sem usar memory_human; não invente "
     "temperatura ou estado de disco quando os dados estiverem ausentes.\n"
+    "16. Cada ferramenta deve ser interpretada somente pelo nome que a identificou: "
+    "get_system_info contém informações gerais, get_disks contém discos, "
+    "get_resource_usage contém uso atual de CPU/RAM, get_scrub_status contém "
+    "scrub e get_alerts contém alertas. Nunca copie dados para outra categoria "
+    "e nunca estime porcentagem ou capacidade ausente.\n"
     "13. Respostas longas devem ser resumidas em tópicos curtos e objetivos "
     "para caber bem no Telegram."
 )
