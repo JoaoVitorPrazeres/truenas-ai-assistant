@@ -1,6 +1,6 @@
 import unittest
 
-from ia_admin.agent.service import direct_readonly_tool
+from ia_admin.agent.service import AgentService, direct_readonly_tool
 
 
 class DirectReadonlyToolTests(unittest.TestCase):
@@ -38,6 +38,41 @@ class DirectReadonlyToolTests(unittest.TestCase):
         for question, expected in cases:
             with self.subTest(question=question):
                 self.assertEqual(direct_readonly_tool(question), expected)
+
+
+class OllamaFormattingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_tool_result_is_formatted_by_ollama(self) -> None:
+        class FakeOllama:
+            def __init__(self) -> None:
+                self.messages = None
+                self.tools = None
+
+            def chat(self, messages, tools):
+                self.messages = messages
+                self.tools = tools
+                return {"content": "Pool nas está ONLINE e com 4,51 TB livres."}
+
+        ollama = FakeOllama()
+        service = AgentService(
+            allowed_chat_ids=frozenset({"123"}),
+            ollama=ollama,
+            tool_functions={
+                "get_pools": lambda: [{
+                    "name": "nas",
+                    "status": "ONLINE",
+                    "free_human": "4.51 TB",
+                }],
+            },
+        )
+
+        response = await service.answer(123, "Como está o pool nas?")
+
+        self.assertIn("ONLINE", response.text)
+        self.assertEqual(ollama.tools, [])
+        self.assertEqual(
+            ollama.messages[-2]["role"],
+            "tool",
+        )
 
 
 if __name__ == "__main__":

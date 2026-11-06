@@ -69,7 +69,28 @@ class AgentService:
             )
             if direct_tool == "get_disk_temperatures" and result == []:
                 result = "O TrueNAS não forneceu temperaturas de discos ou sensores."
-            return AgentResponse(format_direct_result(direct_tool, result))
+            messages = self.conversations.setdefault(
+                chat_id, [{"role": "system", "content": SYSTEM_PROMPT}]
+            )
+            messages.append({"role": "user", "content": text})
+            messages.append({
+                "role": "tool",
+                "content": json.dumps(result, ensure_ascii=False),
+            })
+            try:
+                reply = await asyncio.to_thread(
+                    self.ollama.chat, messages, []
+                )
+            except Exception as exc:
+                return AgentResponse(
+                    f"Não foi possível formatar os dados pelo Ollama. Erro: {exc}"
+                )
+            content = reply.get("content", "").strip()
+            messages.append({"role": "assistant", "content": content})
+            self.conversations[chat_id] = trim_conversation(messages)
+            return AgentResponse(
+                content or "O Ollama não conseguiu gerar uma resposta."
+            )
 
         messages = self.conversations.setdefault(
             chat_id, [{"role": "system", "content": SYSTEM_PROMPT}]

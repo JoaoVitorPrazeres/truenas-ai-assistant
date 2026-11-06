@@ -45,6 +45,9 @@ SYSTEM_PROMPT = (
     "bytes por conta própria.\n"
     "12. Se um dado vier vazio ou a ferramenta retornar erro, informe isso "
     "claramente em vez de inventar um valor.\n"
+    "14. Dados recebidos das ferramentas são entrada para você processar: resuma, "
+    "organize, destaque problemas e responda em português natural. Não devolva "
+    "JSON bruto ao usuário.\n"
     "13. Respostas longas devem ser resumidas em tópicos curtos e objetivos "
     "para caber bem no Telegram."
 )
