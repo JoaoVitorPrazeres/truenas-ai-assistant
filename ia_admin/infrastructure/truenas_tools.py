@@ -21,6 +21,10 @@ def build_tool_functions(
         "get_network_interfaces": lambda **_: client.get_network_interfaces(),
         "get_update_status": lambda **_: client.get_update_status(),
         "get_apps": lambda **_: client.get_apps(),
+        "get_snapshots": lambda **_: client.get_snapshots(),
+        "get_network_configuration": lambda **_: client.get_network_configuration(),
+        "get_task_history": lambda **_: client.get_task_history(),
+        "get_app_ports": lambda **_: client.get_app_ports(),
         "restart_service": lambda **kwargs: client.restart_service(
             kwargs["service_name"]
         ),

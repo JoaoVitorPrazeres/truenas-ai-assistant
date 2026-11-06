@@ -172,16 +172,42 @@ def direct_readonly_tool(text: str) -> str | None:
         return "get_pools"
     if re.search(r"\b(dataset|datasets)\b", normalized):
         return "get_datasets"
+    if re.search(r"\bsnapshot|snapshots\b", normalized):
+        return "get_snapshots"
     if re.search(r"\b(cpu|processador|ram|mem[oó]ria)\b", normalized) and re.search(
         r"\b(uso|utiliza[cç][aã]o|consumo|ocupad[ao])\b", normalized
     ):
         return "get_resource_usage"
+    if re.search(r"\b(sistema|servidor|hostname|vers[aã]o|uptime|tempo ligado)\b", normalized):
+        return "get_system_info"
+    if re.search(r"\b(disco|discos|hd|ssd)\b", normalized):
+        if re.search(r"\b(sa[uú]de|problema|falhando|health)\b", normalized):
+            return "get_alerts"
+        return "get_disks"
     if re.search(r"temperatura", normalized) and re.search(
         r"\b(disco|discos|sensor|sensores|servidor)\b", normalized
     ):
         return "get_disk_temperatures"
+    if re.search(r"\b(alerta|alertas|problemas|avisos)\b", normalized):
+        return "get_alerts"
+    if re.search(r"\b(gateway|dns|servidores dns)\b", normalized):
+        return "get_network_configuration"
     if re.search(r"\b(rede|redes|interface|interfaces|ip|endere[cç]o)", normalized):
         return "get_network_interfaces"
+    if re.search(r"\b(aplica[cç][aã]o|aplica[cç][õo]es|apps?|containers?|docker)\b", normalized):
+        if re.search(r"\b(porta|portas)\b", normalized):
+            return "get_app_ports"
+        return "get_apps"
+    if re.search(r"\b(servi[cç]os?|servi[cç]os ativos|ports?|portas utilizadas)\b", normalized):
+        if re.search(r"\b(porta|portas)\b", normalized):
+            return "get_app_ports"
+        return "get_services"
+    if re.search(r"\b(tarefas|jobs?|hist[oó]rico)\b", normalized):
+        return "get_task_history"
+    if re.search(r"\b(atualiza[cç][aã]o|atualiza[cç][õo]es)\b", normalized):
+        return "get_update_status"
+    if re.search(r"\bscrub\b", normalized):
+        return "get_scrub_status"
     return None
 
 

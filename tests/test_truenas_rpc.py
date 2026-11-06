@@ -321,6 +321,42 @@ class TrueNASRpcTests(unittest.TestCase):
         self.assertEqual(apps[0]["version"], "1.0")
         self.assertEqual(updates, [{"version": "24.10.2"}])
 
+    def test_snapshots_network_tasks_and_app_ports(self) -> None:
+        client = TrueNASClient(make_settings())
+
+        with unittest.mock.patch.object(
+            client,
+            "_rpc",
+            side_effect=[
+                [{"name": "nas/data@snap-1", "dataset": "nas/data"}],
+                {
+                    "hostname": "truenas",
+                    "ipv4gateway": "192.168.100.1",
+                    "nameserver1": "192.168.100.1",
+                },
+                [{
+                    "id": 12,
+                    "method": "pool.scrub.run",
+                    "state": "RUNNING",
+                    "progress": {"percent": 25},
+                }],
+                [{
+                    "name": "plex",
+                    "state": "RUNNING",
+                    "portals": {"Web UI": "http://192.168.100.34:32400"},
+                }],
+            ],
+        ):
+            snapshots = client.get_snapshots()
+            network = client.get_network_configuration()
+            tasks = client.get_task_history()
+            ports = client.get_app_ports()
+
+        self.assertEqual(snapshots[0]["name"], "nas/data@snap-1")
+        self.assertEqual(network["ipv4_gateway"], "192.168.100.1")
+        self.assertEqual(tasks[0]["method"], "pool.scrub.run")
+        self.assertEqual(ports[0]["address"], "http://192.168.100.34:32400")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -322,6 +322,11 @@ class TrueNASClient:
                 "size_human": bytes_to_human(disk.get("size")),
                 "type": disk.get("type"),
                 "serial": disk.get("serial"),
+                "status": (
+                    disk.get("status")
+                    or disk.get("health")
+                    or disk.get("smart_status")
+                ),
             }
             for disk in self._require_dict_list(
                 self._rpc("disk.query"), "disk.query"
@@ -443,6 +448,9 @@ class TrueNASClient:
                     for address in (interface.get("state") or {}).get("aliases", [])
                     if address.get("address")
                 ],
+                "link_speed_mbps": (
+                    interface.get("state") or {}
+                ).get("link_speed"),
             }
             for interface in interfaces
         ]
@@ -456,8 +464,75 @@ class TrueNASClient:
                 "name": app.get("name"),
                 "state": app.get("state"),
                 "version": (app.get("metadata") or {}).get("app_version"),
+                "portals": app.get("portals") or {},
             }
             for app in self._require_dict_list(
                 self._rpc("app.query"), "app.query"
             )
         ]
+
+    def get_snapshots(self) -> list[dict[str, Any]]:
+        snapshots = self._require_dict_list(
+            self._rpc("zfs.snapshot.query"), "zfs.snapshot.query"
+        )
+        result = []
+        for snapshot in snapshots:
+            properties = snapshot.get("properties") or {}
+            result.append({
+                "name": snapshot.get("name"),
+                "dataset": snapshot.get("dataset"),
+                "type": snapshot.get("type"),
+                "creation": snapshot.get("createtxg"),
+                "used_bytes": (properties.get("used") or {}).get("value")
+                if isinstance(properties.get("used"), dict)
+                else properties.get("used"),
+            })
+        return result
+
+    def get_network_configuration(self) -> dict[str, Any]:
+        configuration = self._rpc("network.configuration")
+        if not isinstance(configuration, dict):
+            raise ExternalServiceError(
+                "TrueNAS retornou um formato inesperado para a configuração de rede"
+            )
+        return {
+            "hostname": configuration.get("hostname"),
+            "domain": configuration.get("domain"),
+            "ipv4_gateway": configuration.get("ipv4gateway"),
+            "ipv6_gateway": configuration.get("ipv6gateway"),
+            "nameservers": configuration.get("nameserver"),
+            "nameserver1": configuration.get("nameserver1"),
+            "nameserver2": configuration.get("nameserver2"),
+            "nameserver3": configuration.get("nameserver3"),
+        }
+
+    def get_task_history(self) -> list[dict[str, Any]]:
+        jobs = self._require_dict_list(
+            self._rpc("core.get_jobs"), "core.get_jobs"
+        )
+        result = []
+        for job in jobs:
+            result.append({
+                "id": job.get("id"),
+                "method": job.get("method"),
+                "state": job.get("state"),
+                "progress": job.get("progress"),
+                "description": job.get("description"),
+                "time_started": job.get("time_started"),
+                "time_finished": job.get("time_finished"),
+                "error": job.get("error"),
+            })
+        return result
+
+    def get_app_ports(self) -> list[dict[str, Any]]:
+        ports = []
+        apps = self.get_apps()
+        for app in apps:
+            for label, portal in (app.get("portals") or {}).items():
+                if isinstance(portal, str):
+                    ports.append({
+                        "application": app.get("name"),
+                        "label": label,
+                        "address": portal,
+                    })
+        return ports

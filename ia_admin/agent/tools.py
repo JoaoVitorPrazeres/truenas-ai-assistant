@@ -72,6 +72,26 @@ TOOL_DEFINITIONS = [
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
+        "name": "get_snapshots",
+        "description": "Lista snapshots ZFS existentes, seus datasets e metadados.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "get_network_configuration",
+        "description": "Retorna hostname, gateway IPv4/IPv6 e servidores DNS configurados no TrueNAS.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "get_task_history",
+        "description": "Lista tarefas e jobs recentes ou atuais do TrueNAS, com estado, progresso e erros.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "get_app_ports",
+        "description": "Lista portais HTTP/HTTPS e endereços configurados pelos Apps do TrueNAS.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
         "name": "restart_service",
         "description": "Reinicia um serviço do TrueNAS. AÇÃO PERIGOSA: exige confirmação do usuário.",
         "parameters": {

@@ -24,6 +24,21 @@ class DirectReadonlyToolTests(unittest.TestCase):
             direct_readonly_tool("Crie um novo dataset no pool principal")
         )
 
+    def test_monitoring_questions_route_to_readonly_tools(self) -> None:
+        cases = (
+            ("Quais snapshots existem?", "get_snapshots"),
+            ("Qual é o gateway configurado?", "get_network_configuration"),
+            ("Quais servidores DNS estão configurados?", "get_network_configuration"),
+            ("Liste o histórico de tarefas", "get_task_history"),
+            ("Quais aplicações estão instaladas?", "get_apps"),
+            ("Quais portas utilizadas pelos apps?", "get_app_ports"),
+            ("Existe algum alerta ativo?", "get_alerts"),
+            ("Qual a versão do TrueNAS?", "get_system_info"),
+        )
+        for question, expected in cases:
+            with self.subTest(question=question):
+                self.assertEqual(direct_readonly_tool(question), expected)
+
 
 if __name__ == "__main__":
     unittest.main()
