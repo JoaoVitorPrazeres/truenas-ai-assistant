@@ -141,6 +141,24 @@ class TrueNASRpcTests(unittest.TestCase):
             }],
         )
 
+    def test_resource_usage_handles_nested_list_and_non_dict_samples(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(return_value={
+            "result": [
+                {"name": "cpu", "data": [["invalid"], {
+                    "aggregations": {"mean": {"cpu": 12.5}},
+                }]},
+                {"name": "memory", "data": [{
+                    "aggregations": {"mean": {"available": 4 * 1024 ** 3}},
+                }]},
+            ],
+        })
+
+        result = client.get_resource_usage()
+
+        self.assertEqual(result["cpu_percent"], 12.5)
+        self.assertEqual(result["memory_available_gib"], 4)
+
     def test_system_info_is_normalized_without_disk_fields(self) -> None:
         client = TrueNASClient(make_settings())
         client._rpc = unittest.mock.Mock(return_value={

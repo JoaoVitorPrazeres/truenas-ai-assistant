@@ -377,6 +377,8 @@ class TrueNASClient:
                 "aggregate": True,
             }],
         )
+        if isinstance(data, dict):
+            data = data.get("result") or data.get("data") or data.get("metrics")
         if not isinstance(data, list):
             raise ExternalServiceError(
                 "TrueNAS retornou um formato inesperado para uso de recursos"
@@ -388,7 +390,12 @@ class TrueNASClient:
                 continue
             samples = entry.get("data")
             if isinstance(samples, list) and samples:
-                aggregations = samples[-1].get("aggregations") or {}
+                last_sample = samples[-1]
+                aggregations = (
+                    last_sample.get("aggregations") or {}
+                    if isinstance(last_sample, dict)
+                    else {}
+                )
             else:
                 aggregations = entry.get("aggregations") or {}
             mean = aggregations.get("mean")
