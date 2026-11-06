@@ -539,22 +539,34 @@ class TrueNASClient:
         interfaces = self._require_dict_list(
             self._rpc("interface.query"), "interface.query"
         )
-        return [
-            {
+        normalized_interfaces = []
+        for interface in interfaces:
+            state = interface.get("state")
+            state = state if isinstance(state, dict) else {}
+            aliases = state.get("aliases")
+            if not isinstance(aliases, list):
+                aliases = interface.get("aliases")
+            if not isinstance(aliases, list):
+                aliases = []
+
+            addresses = []
+            for alias in aliases:
+                address = (
+                    alias.get("address")
+                    if isinstance(alias, dict)
+                    else alias
+                )
+                if isinstance(address, str) and address and address not in addresses:
+                    addresses.append(address)
+
+            normalized_interfaces.append({
                 "name": interface.get("name"),
                 "description": interface.get("description"),
-                "state": (interface.get("state") or {}).get("link_state"),
-                "addresses": [
-                    address.get("address")
-                    for address in (interface.get("state") or {}).get("aliases", [])
-                    if address.get("address")
-                ],
-                "link_speed_mbps": (
-                    interface.get("state") or {}
-                ).get("link_speed"),
-            }
-            for interface in interfaces
-        ]
+                "state": state.get("link_state"),
+                "addresses": addresses,
+                "link_speed_mbps": state.get("link_speed"),
+            })
+        return normalized_interfaces
 
     def get_update_status(self) -> Any:
         return self._rpc("update.available_versions")

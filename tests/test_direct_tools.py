@@ -20,6 +20,14 @@ class DirectReadonlyToolTests(unittest.TestCase):
         self.assertIn("192.168.100.34", formatted)
         self.assertNotIn("192.168.1.100", formatted)
 
+    def test_network_interface_tool_error_is_returned(self) -> None:
+        formatted = format_direct_result(
+            "get_network_interfaces",
+            {"error": "Falha na ferramenta get_network_interfaces"},
+        )
+
+        self.assertEqual(formatted, "Falha na ferramenta get_network_interfaces")
+
     def test_storage_and_pool_questions_call_get_pools(self) -> None:
         for question in (
             "Quais são os pools do servidor?",
@@ -45,6 +53,8 @@ class DirectReadonlyToolTests(unittest.TestCase):
             ("Quais snapshots existem?", "get_snapshots"),
             ("Qual é o gateway configurado?", "get_network_configuration"),
             ("Quais servidores DNS estão configurados?", "get_network_configuration"),
+            ("Qual é o endereço IP do servidor?", "get_network_interfaces"),
+            ("Me informe o IPv4 da rede", "get_network_interfaces"),
             ("Liste o histórico de tarefas", "get_task_history"),
             ("Quais aplicações estão instaladas?", "get_apps"),
             ("Quais portas utilizadas pelos apps?", "get_app_ports"),

@@ -234,7 +234,11 @@ def direct_readonly_tool(text: str) -> str | None:
         r"\b(criar|crie|adicionar|adicione|novo|nova)\b", normalized
     ):
         return None
-    if re.search(r"\b(ip|endere[cç]o ip|endere[cç]os ip)\b", normalized):
+    if re.search(
+        r"\b(ip(?:v4|v6)?|endere[cç]o(?:s)? ip(?:v4|v6)?|"
+        r"endere[cç]o(?:s)?(?: da)? rede)\b",
+        normalized,
+    ):
         if re.search(r"\bgateway|dns|servidor dns", normalized):
             return "get_network_configuration"
         return "get_network_interfaces"
@@ -308,6 +312,9 @@ def format_direct_result(tool_name: str, result: Any) -> str:
             else:
                 lines.append("  - sem endereços")
         return "\n".join(lines)
+    if tool_name == "get_network_interfaces" and isinstance(result, dict):
+        if result.get("error"):
+            return str(result["error"])
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 

@@ -105,7 +105,7 @@ class TelegramBotAdapter:
                 f"{confirmation.name}({confirmation.arguments}). Confirma?",
                 keyboard,
             )
-        elif response.text:
+        else:
             await safe_send_message(target, response.text)
 
     async def handle_error(

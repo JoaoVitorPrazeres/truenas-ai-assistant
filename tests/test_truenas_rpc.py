@@ -273,6 +273,32 @@ class TrueNASRpcTests(unittest.TestCase):
         ):
             client.get_pools()
 
+    def test_network_interfaces_accepts_top_level_aliases(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(return_value=[{
+            "name": "enp2s0f1",
+            "description": "LAN",
+            "state": {"link_state": "UP", "link_speed": 1000},
+            "aliases": [
+                {"address": "192.168.100.34"},
+                {"address": "192.168.100.34"},
+                {"address": "fe80::1"},
+            ],
+        }])
+
+        result = client.get_network_interfaces()
+
+        self.assertEqual(
+            result,
+            [{
+                "name": "enp2s0f1",
+                "description": "LAN",
+                "state": "UP",
+                "addresses": ["192.168.100.34", "fe80::1"],
+                "link_speed_mbps": 1000,
+            }],
+        )
+
     def test_secondary_rpc_methods_build_params(self) -> None:
         client = TrueNASClient(make_settings())
         client._rpc = unittest.mock.Mock(side_effect=[
