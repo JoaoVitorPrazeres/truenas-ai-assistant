@@ -28,7 +28,7 @@ TOOL_DEFINITIONS = [
     }},
     {"type": "function", "function": {
         "name": "get_resource_usage",
-        "description": "Retorna o uso atual (tempo real) de CPU e RAM do servidor, em porcentagem.",
+        "description": "Retorna a média de CPU e a memória disponível agregadas pelo reporting do TrueNAS; não representa uma leitura instantânea.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {

@@ -384,6 +384,56 @@ Esse modo usa CPU/RAM do TrueNAS para executar o modelo. Verifique se o
 equipamento tem recursos livres suficientes; caso contrário, execute Ollama em
 outro computador e altere `OLLAMA_HOST` para o endereço desse serviço.
 
+### Alternativa: recriar manualmente o container no TrueNAS
+
+Use estes passos apenas se o bot foi instalado manualmente com `docker run`, e
+não como Custom App. A conexão com a API do TrueNAS deve usar HTTPS: no `.env`,
+confirme que `TRUENAS_URL` começa com `https://` (nunca `http://`) e que
+`TRUENAS_CA_BUNDLE` aponta para o certificado montado no container. O TrueNAS
+rejeita a autenticação da chave de API quando a conexão é feita por HTTP. Isso
+não é corrigido recriando o container: ajuste `TRUENAS_URL` para HTTPS antes de
+iniciá-lo. Se o certificado não for confiável, configure também a CA conforme
+as instruções acima; não troque a URL para HTTP nem desative a validação TLS.
+
+No Shell do TrueNAS, dentro da pasta do repositório, construa a imagem antes de
+parar o container em execução:
+
+```sh
+cd ~/truenas-ai-assistant
+sudo docker build -t ia-admin-telegram:latest .
+```
+
+Depois, recrie o container:
+
+```sh
+sudo docker rm -f ia-agent
+
+sudo docker run -d \
+  --name ia-agent \
+  --network host \
+  --restart unless-stopped \
+  --env-file "$PWD/.env" \
+  -e OLLAMA_HOST=http://127.0.0.1:11434 \
+  --add-host=truenas.home.arpa:192.168.100.34 \
+  -v "$PWD/certs/truenas-local.crt:/certs/truenas-local.crt:ro" \
+  ia-admin-telegram:latest
+```
+
+Este exemplo pressupõe que `certs/truenas-local.crt` existe no repositório e
+que o `.env` contém `TRUENAS_CA_BUNDLE=/certs/truenas-local.crt` e
+`TRUENAS_URL=https://truenas.home.arpa`. O endereço após `--add-host` deve ser
+o IP LAN atual do TrueNAS; ajuste o hostname e o IP se sua configuração for
+diferente. A montagem do certificado é somente leitura. `docker rm -f`
+interrompe e remove o container existente, mas preserva a imagem e os arquivos
+de configuração.
+
+Verifique se o novo container iniciou e consulte o log:
+
+```sh
+sudo docker ps --filter name=ia-agent
+sudo docker logs --tail 50 ia-agent
+```
+
 ## Problemas comuns
 
 - **O bot encerra logo após iniciar:** confira se todas as variáveis obrigatórias

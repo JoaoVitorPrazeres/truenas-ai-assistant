@@ -136,45 +136,157 @@ class OllamaFormattingTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_broad_status_query_uses_multiple_tools(self) -> None:
-        class FakeOllama:
-            def __init__(self) -> None:
-                self.messages = None
-
+        class UnexpectedOllama:
             def chat(self, messages, tools):
-                self.messages = messages
-                return {"content": "Resumo validado do servidor."}
+                raise AssertionError("O resumo do servidor deve ser determinístico")
 
         called = []
 
         def make_function(name):
             def function():
                 called.append(name)
-                return {"status": name}
+                if name == "get_system_info":
+                    return {
+                        "hostname": "truenas",
+                        "version": "25.10.7",
+                        "uptime_human": "2 horas",
+                        "cpu_model": "Intel i5-8400T",
+                        "cpu_cores": 6,
+                        "memory_bytes": 7710375936,
+                        "memory_human": "7.18 GiB",
+                        "memory_total_bytes": 7710375936,
+                        "memory_total_human": "7.18 GiB",
+                        "load_average": [0.0063, 0.0332, 0.0605],
+                    }
+                if name == "get_resource_usage":
+                    return {
+                        "cpu_percent": 0.63,
+                        "memory_available_bytes": 1524060200,
+                        "memory_available_gib": 1.42,
+                    }
+                if name == "get_network_interfaces":
+                    return [
+                        {
+                            "name": "enp2s0f1",
+                            "state": "UP",
+                            "addresses": ["192.168.100.34"],
+                        },
+                        {
+                            "name": "tailscale0",
+                            "state": "UP",
+                            "addresses": ["100.65.161.105"],
+                        },
+                    ]
+                if name == "get_network_configuration":
+                    return {
+                        "ipv4_gateway": "192.168.100.1",
+                        "nameservers": ["192.168.100.1"],
+                    }
+                if name == "get_services":
+                    return [{"service": "cifs", "state": "RUNNING"}]
+                if name == "get_pools":
+                    return [{"name": "nas", "status": "ONLINE", "free_human": "4.5 TB"}]
+                if name == "get_disks":
+                    return [{"name": "sda", "model": "Disk model", "status": "HEALTHY"}]
+                if name == "get_disk_temperatures":
+                    return []
+                if name == "get_alerts":
+                    return []
+                if name == "get_scrub_status":
+                    return [{"pool": "nas", "scan_function": None, "scan_state": None}]
+                if name == "get_apps":
+                    return [{"name": "ollama", "state": "RUNNING"}]
+                raise AssertionError(f"Ferramenta inesperada: {name}")
             return function
 
-        ollama = FakeOllama()
         tool_names = (
             "get_system_info",
             "get_resource_usage",
+            "get_network_interfaces",
+            "get_network_configuration",
+            "get_services",
             "get_pools",
             "get_disks",
             "get_disk_temperatures",
             "get_alerts",
             "get_scrub_status",
+            "get_apps",
         )
         service = AgentService(
             allowed_chat_ids=frozenset({"123"}),
-            ollama=ollama,
+            ollama=UnexpectedOllama(),
             tool_functions={name: make_function(name) for name in tool_names},
         )
 
         response = await service.answer(
             123,
-            "Faça um resumo do estado geral do servidor",
+            "Quero ver todas as informações do servidor",
         )
 
-        self.assertEqual(response.text, "Resumo validado do servidor.")
+        self.assertIn("Hostname: truenas", response.text)
+        self.assertIn("RAM utilizada estimada: 5.76 GiB (80.23%)", response.text)
+        self.assertIn("192.168.100.34", response.text)
+        self.assertIn("100.65.161.105", response.text)
+        self.assertIn("Tailscale", response.text)
+        self.assertIn("Gateway IPv4: 192.168.100.1", response.text)
+        self.assertIn("cifs: RUNNING", response.text)
+        self.assertIn("Nenhum alerta ativo foi detectado.", response.text)
         self.assertEqual(set(called), set(tool_names))
+
+    async def test_individual_system_info_includes_current_network_interfaces(self) -> None:
+        class UnexpectedOllama:
+            def chat(self, messages, tools):
+                raise AssertionError("A resposta do sistema deve ser determinística")
+
+        service = AgentService(
+            allowed_chat_ids=frozenset({"123"}),
+            ollama=UnexpectedOllama(),
+            tool_functions={
+                "get_system_info": lambda: {
+                    "hostname": "truenas",
+                    "version": "25.10.7",
+                    "memory_human": "7.18 GiB",
+                },
+                "get_network_interfaces": lambda: [{
+                    "name": "tailscale0",
+                    "state": "UP",
+                    "addresses": ["100.65.161.105"],
+                }],
+            },
+        )
+
+        response = await service.answer(123, "Mostre as informações do servidor")
+
+        self.assertIn("Versão: 25.10.7", response.text)
+        self.assertIn("100.65.161.105", response.text)
+        self.assertIn("Tailscale", response.text)
+
+    async def test_individual_resource_usage_uses_total_and_available_memory(self) -> None:
+        class UnexpectedOllama:
+            def chat(self, messages, tools):
+                raise AssertionError("O uso de recursos deve ser formatado diretamente")
+
+        service = AgentService(
+            allowed_chat_ids=frozenset({"123"}),
+            ollama=UnexpectedOllama(),
+            tool_functions={
+                "get_resource_usage": lambda: {
+                    "cpu_percent": 0.63,
+                    "memory_available_bytes": 1524060200,
+                    "memory_available_gib": 1.42,
+                },
+                "get_system_info": lambda: {
+                    "memory_bytes": 7710375936,
+                    "memory_human": "7.18 GiB",
+                },
+            },
+        )
+
+        response = await service.answer(123, "Mostre o uso de memória e CPU")
+
+        self.assertIn("CPU: 0.63% (média no período consultado)", response.text)
+        self.assertIn("RAM utilizada estimada: 5.76 GiB (80.23%)", response.text)
+        self.assertIn("RAM disponível (média): 1.42 GiB", response.text)
 
 
 if __name__ == "__main__":
