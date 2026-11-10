@@ -28,6 +28,18 @@ class DirectReadonlyToolTests(unittest.TestCase):
 
         self.assertEqual(formatted, "Falha na ferramenta get_network_interfaces")
 
+    def test_network_interface_result_includes_tailscale_ip(self) -> None:
+        result = [
+            {"name": "enp2s0f1", "state": "UP", "addresses": ["192.168.100.34"]},
+            {"name": "tailscale0", "state": "UP", "addresses": ["100.64.0.5"]},
+        ]
+
+        formatted = format_direct_result("get_network_interfaces", result)
+
+        self.assertIn("192.168.100.34", formatted)
+        self.assertIn("100.64.0.5", formatted)
+        self.assertIn("Tailscale", formatted)
+
     def test_storage_and_pool_questions_call_get_pools(self) -> None:
         for question in (
             "Quais são os pools do servidor?",

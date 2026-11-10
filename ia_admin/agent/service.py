@@ -304,9 +304,11 @@ def format_direct_result(tool_name: str, result: Any) -> str:
         lines = ["Interfaces de rede:"]
         for interface in result:
             name = interface.get("name") or "(sem nome)"
+            description = interface.get("description") or ""
             state = interface.get("state") or "estado desconhecido"
             addresses = interface.get("addresses") or []
-            lines.append(f"- {name}: {state}")
+            interface_label = "Tailscale" if "tailscale" in str(name).lower() or "tailscale" in str(description).lower() else "Rede"
+            lines.append(f"- {name}: {state} ({interface_label})")
             if addresses:
                 lines.extend(f"  - {address}" for address in addresses)
             else:
