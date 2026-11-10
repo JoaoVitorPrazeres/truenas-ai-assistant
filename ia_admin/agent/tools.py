@@ -43,7 +43,12 @@ TOOL_DEFINITIONS = [
     }},
     {"type": "function", "function": {
         "name": "get_disk_temperatures",
-        "description": "Retorna a temperatura atual de discos e sensores do servidor, quando disponíveis no TrueNAS.",
+        "description": "Retorna temperatura atual e limite crítico reportado para cada disco.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "get_system_temperatures",
+        "description": "Retorna temperaturas atuais de CPU disponibilizadas pelo gráfico cputemp do TrueNAS, quando disponíveis.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {

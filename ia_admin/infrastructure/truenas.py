@@ -515,27 +515,91 @@ class TrueNASClient:
         names = [disk.get("name") for disk in disks if disk.get("name")]
         if not names:
             return []
-        items = self._rpc("disk.temperatures", [names])
+        items = self._rpc("disk.temperatures", [names, True])
         if isinstance(items, dict):
             items = items.get("temperatures") or items.get("data") or items
         if isinstance(items, dict):
-            items = [
-                {"name": name, "temperature": value}
-                for name, value in items.items()
-            ]
+            items = [{"name": name, **(
+                value if isinstance(value, dict) else {"temperature": value}
+            )} for name, value in items.items()]
         if not isinstance(items, list):
-            return []
+            raise ExternalServiceError(
+                "TrueNAS retornou um formato inesperado para temperaturas dos discos"
+            )
 
         return [
             {
                 "name": item.get("name") or item.get("disk"),
                 "temperature": item.get("temperature", item.get("temp")),
                 "unit": item.get("unit") or "C",
+                "critical_temperature": (
+                    item.get("critical_temperature")
+                    or item.get("critical")
+                    or item.get("threshold")
+                ),
             }
             for item in items
             if isinstance(item, dict)
             and item.get("temperature", item.get("temp")) is not None
         ]
+
+    def get_system_temperatures(self) -> list[dict[str, Any]]:
+        data = self._rpc(
+            "reporting.get_data",
+            [[{"name": "cputemp"}], {
+                "unit": "HOUR",
+                "page": 1,
+                "aggregate": False,
+            }],
+        )
+        if isinstance(data, dict):
+            data = data.get("result") or data.get("data") or data.get("metrics")
+        if not isinstance(data, list):
+            raise ExternalServiceError(
+                "TrueNAS retornou um formato inesperado para temperaturas da CPU"
+            )
+
+        readings = []
+        for series in data:
+            if not isinstance(series, dict) or series.get("name") != "cputemp":
+                continue
+            legend = series.get("legend")
+            samples = series.get("data")
+            if not isinstance(legend, list) or not legend or not isinstance(samples, list):
+                continue
+            for sample in reversed(samples):
+                if isinstance(sample, (list, tuple)):
+                    for index, (label, value) in enumerate(zip(legend, sample)):
+                        if (
+                            index > 0
+                            and isinstance(label, str)
+                            and isinstance(value, (int, float))
+                            and not isinstance(value, bool)
+                        ):
+                            readings.append({
+                                "name": label,
+                                "temperature": float(value),
+                                "unit": "C",
+                            })
+                    if readings:
+                        break
+                elif isinstance(sample, dict):
+                    values = sample.get("values")
+                    if isinstance(values, dict):
+                        readings.extend(
+                            {
+                                "name": label,
+                                "temperature": float(value),
+                                "unit": "C",
+                            }
+                            for label, value in values.items()
+                            if isinstance(label, str)
+                            and isinstance(value, (int, float))
+                            and not isinstance(value, bool)
+                        )
+                    if readings:
+                        break
+        return readings
 
     def get_disk_temperature_alerts(self) -> list[dict[str, Any]]:
         disks = self._require_dict_list(

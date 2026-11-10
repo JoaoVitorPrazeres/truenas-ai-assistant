@@ -16,6 +16,7 @@ def build_tool_functions(
         "get_services": lambda **_: client.get_services(),
         "get_alerts": lambda **_: client.get_alerts(),
         "get_disk_temperatures": lambda **_: client.get_disk_temperatures(),
+        "get_system_temperatures": lambda **_: client.get_system_temperatures(),
         "get_disk_temperature_alerts": lambda **_: client.get_disk_temperature_alerts(),
         "get_scrub_status": lambda **_: client.get_scrub_status(),
         "get_network_interfaces": lambda **_: client.get_network_interfaces(),

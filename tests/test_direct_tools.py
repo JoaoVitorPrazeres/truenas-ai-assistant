@@ -201,6 +201,8 @@ class OllamaFormattingTests(unittest.IsolatedAsyncioTestCase):
                     return [{"name": "sda", "model": "Disk model", "status": "HEALTHY"}]
                 if name == "get_disk_temperatures":
                     return []
+                if name == "get_system_temperatures":
+                    return [{"name": "cpu0", "temperature": 50, "unit": "C"}]
                 if name == "get_alerts":
                     return []
                 if name == "get_scrub_status":
@@ -219,6 +221,7 @@ class OllamaFormattingTests(unittest.IsolatedAsyncioTestCase):
             "get_pools",
             "get_disks",
             "get_disk_temperatures",
+            "get_system_temperatures",
             "get_alerts",
             "get_scrub_status",
             "get_apps",
@@ -241,6 +244,7 @@ class OllamaFormattingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Tailscale", response.text)
         self.assertIn("Gateway IPv4: 192.168.100.1", response.text)
         self.assertIn("cifs: RUNNING", response.text)
+        self.assertIn("cpu0: 50 °C", response.text)
         self.assertIn("Nenhum alerta ativo foi detectado.", response.text)
         self.assertEqual(set(called), set(tool_names))
 

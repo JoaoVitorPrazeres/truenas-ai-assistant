@@ -168,6 +168,9 @@ TELEGRAM_BOT_TOKEN=token_fornecido_pelo_botfather
 TELEGRAM_ALLOWED_CHAT_ID=seu_id_numerico_do_telegram
 OLLAMA_MODEL=qwen3:1.7b
 OLLAMA_HOST=http://127.0.0.1:11434
+TEMPERATURE_MONITOR_INTERVAL_MINUTES=5
+DISK_CRITICAL_TEMP_C=50
+SYSTEM_CRITICAL_TEMP_C=85
 ```
 
 O significado de cada opção:
@@ -182,10 +185,21 @@ O significado de cada opção:
 | `TELEGRAM_ALLOWED_CHAT_ID` | Seu ID numérico do Telegram. IDs adicionais podem ser separados por vírgula. |
 | `OLLAMA_MODEL` | Nome do modelo baixado no Ollama. O padrão é `qwen3:1.7b`. |
 | `OLLAMA_HOST` | Endereço do Ollama. Para execução local, mantenha o valor padrão. |
+| `TEMPERATURE_MONITOR_INTERVAL_MINUTES` | Intervalo do monitor automático; mínimo de 5 minutos por limite da API de temperatura dos discos. |
+| `DISK_CRITICAL_TEMP_C` | Temperatura crítica padrão dos discos em °C. Limites críticos informados pelo próprio disco, quando disponíveis, também são respeitados. |
+| `SYSTEM_CRITICAL_TEMP_C` | Temperatura crítica da CPU em °C, se o TrueNAS disponibilizar a métrica `cputemp`. |
 
 Não coloque aspas em volta dos valores. O bot não inicia sem URL, usuário e
 chave do TrueNAS, token do Telegram e pelo menos um ID de chat permitido.
 Mantenha o arquivo `.env` privado: ele contém credenciais.
+
+O monitor automático inicia junto com o bot, verifica discos e sensores de CPU
+disponíveis pela API do TrueNAS e envia alertas para todos os chats autorizados
+ao entrar em estado crítico e ao normalizar. Os padrões são 5 minutos, 50 °C
+para discos e 85 °C para CPU. Para temperatura de discos, a API do TrueNAS
+atualiza as leituras no máximo a cada 5 minutos. Sensores de CPU dependem do
+hardware e da disponibilidade da métrica `cputemp`; ausência de leitura não é
+tratada como temperatura normal.
 
 ## 6. Instale as dependências do projeto
 
@@ -336,6 +350,9 @@ services:
       TELEGRAM_ALLOWED_CHAT_ID: "SEU_ID_NUMERICO"
       OLLAMA_MODEL: "qwen3:1.7b"
       OLLAMA_HOST: "http://ollama:11434"
+      TEMPERATURE_MONITOR_INTERVAL_MINUTES: "5"
+      DISK_CRITICAL_TEMP_C: "50"
+      SYSTEM_CRITICAL_TEMP_C: "85"
     volumes:
       - /mnt/POOL/apps/ia-admin/certs/truenas-ca.pem:/certs/truenas-ca.pem:ro
 

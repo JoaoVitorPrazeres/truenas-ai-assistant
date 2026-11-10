@@ -407,17 +407,53 @@ class TrueNASRpcTests(unittest.TestCase):
         client = TrueNASClient(make_settings())
         client._rpc = unittest.mock.Mock(side_effect=[
             [{"name": "sda"}],
-            [{"name": "sda", "temperature": 38, "unit": "C"}],
+            {"sda": {"temperature": 38, "critical": 55}},
         ])
 
         result = client.get_disk_temperatures()
         self.assertEqual(
             result,
-            [{"name": "sda", "temperature": 38, "unit": "C"}],
+            [{
+                "name": "sda",
+                "temperature": 38,
+                "unit": "C",
+                "critical_temperature": 55,
+            }],
         )
         self.assertEqual(
             client._rpc.call_args_list[1],
-            unittest.mock.call("disk.temperatures", [["sda"]]),
+            unittest.mock.call("disk.temperatures", [["sda"], True]),
+        )
+
+    def test_system_temperatures_reads_latest_cputemp_series_sample(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(return_value=[
+            {
+                "name": "cputemp",
+                "legend": ["time", "cpu0", "cpu1"],
+                "data": [
+                    [1794320000, 61, 62],
+                    [1794320300, 68, 72],
+                ],
+            },
+        ])
+
+        result = client.get_system_temperatures()
+
+        self.assertEqual(
+            result,
+            [
+                {"name": "cpu0", "temperature": 68.0, "unit": "C"},
+                {"name": "cpu1", "temperature": 72.0, "unit": "C"},
+            ],
+        )
+        client._rpc.assert_called_once_with(
+            "reporting.get_data",
+            [[{"name": "cputemp"}], {
+                "unit": "HOUR",
+                "page": 1,
+                "aggregate": False,
+            }],
         )
 
         client._rpc = unittest.mock.Mock(return_value=[

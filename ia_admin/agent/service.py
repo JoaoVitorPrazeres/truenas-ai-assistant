@@ -27,6 +27,7 @@ SERVER_OVERVIEW_TOOLS = (
     "get_pools",
     "get_disks",
     "get_disk_temperatures",
+    "get_system_temperatures",
     "get_alerts",
     "get_scrub_status",
     "get_apps",
@@ -132,6 +133,7 @@ class AgentService:
                 "get_network_interfaces",
                 "get_system_info",
                 "get_resource_usage",
+                "get_system_temperatures",
             }:
                 return AgentResponse(format_direct_result(direct_tool, result))
             messages = self.conversations.setdefault(
@@ -292,7 +294,11 @@ def direct_readonly_tool(text: str) -> str | None:
             return "get_alerts"
         return "get_disks"
     if re.search(r"temperatura", normalized) and re.search(
-        r"\b(disco|discos|sensor|sensores|servidor)\b", normalized
+        r"\b(cpu|processador|servidor|sistema|sensor|sensores)\b", normalized
+    ):
+        return "get_system_temperatures"
+    if re.search(r"temperatura", normalized) and re.search(
+        r"\b(disco|discos)\b", normalized
     ):
         return "get_disk_temperatures"
     if re.search(r"\b(alerta|alertas|problemas|avisos)\b", normalized):
@@ -392,6 +398,28 @@ def format_direct_result(tool_name: str, result: Any) -> str:
         interfaces = result.get("network_interfaces")
         if interfaces is not None:
             lines.extend(["", format_direct_result("get_network_interfaces", interfaces)])
+        return "\n".join(lines)
+    if tool_name in {"get_disk_temperatures", "get_system_temperatures"}:
+        if isinstance(result, dict) and result.get("error"):
+            return str(result["error"])
+        if not isinstance(result, list) or not result:
+            return "O TrueNAS não informou temperaturas para os sensores consultados."
+        title = (
+            "🌡️ Temperaturas dos discos:"
+            if tool_name == "get_disk_temperatures"
+            else "🌡️ Temperaturas da CPU:"
+        )
+        lines = [title]
+        for item in result:
+            if not isinstance(item, dict):
+                continue
+            temperature = item.get("temperature")
+            unit = item.get("unit") or "C"
+            threshold = item.get("critical_temperature")
+            line = f"- {item.get('name') or 'Sensor sem nome'}: {temperature} °{unit}"
+            if threshold is not None:
+                line += f" (limite reportado: {threshold} °{unit})"
+            lines.append(line)
         return "\n".join(lines)
     if tool_name == "get_network_interfaces" and isinstance(result, list):
         if not result:
@@ -517,6 +545,16 @@ def format_server_overview(results: dict[str, Any]) -> str:
             f"{item.get('temperature')} °{item.get('unit') or 'C'}"
         ),
         "Temperaturas não informadas pelo TrueNAS.",
+    )
+    _append_list_section(
+        lines,
+        "🌡️ Temperaturas da CPU:",
+        results.get("get_system_temperatures"),
+        lambda item: (
+            f"{item.get('name') or 'CPU'}: "
+            f"{item.get('temperature')} °{item.get('unit') or 'C'}"
+        ),
+        "Sensores de CPU não disponíveis pela API do TrueNAS.",
     )
     _append_list_section(
         lines,

@@ -16,6 +16,7 @@ from telegram.ext import (
 
 from ia_admin.agent.service import AgentResponse, AgentService
 from ia_admin.config import Settings
+from ia_admin.interfaces.temperature_monitor import TemperatureMonitor
 
 
 log = logging.getLogger("ia-admin-telegram")
@@ -70,12 +71,18 @@ class TelegramBotAdapter:
         self.settings = settings
         self.agent = agent
         self.chat_locks: dict[int, asyncio.Lock] = {}
+        self.temperature_monitor = TemperatureMonitor(
+            settings, agent.tool_functions
+        )
+        self._temperature_monitor_task: asyncio.Task[None] | None = None
 
     def build_application(self) -> Application:
         app = (
             Application.builder()
             .token(self.settings.telegram_bot_token)
             .concurrent_updates(True)
+            .post_init(self._start_temperature_monitor)
+            .post_stop(self._stop_temperature_monitor)
             .build()
         )
         app.add_handler(CommandHandler("start", self.start))
@@ -88,6 +95,30 @@ class TelegramBotAdapter:
         )
         app.add_error_handler(self.handle_error)
         return app
+
+    async def _start_temperature_monitor(self, application: Application) -> None:
+        self._temperature_monitor_task = application.create_task(
+            self.temperature_monitor.run(application.bot),
+            name="temperature-monitor",
+        )
+        log.info(
+            "Monitor de temperatura iniciado (intervalo: %s min, "
+            "limite disco: %.1f °C, limite CPU: %.1f °C)",
+            self.settings.temperature_monitor_interval_minutes,
+            self.settings.disk_critical_temp_c,
+            self.settings.system_critical_temp_c,
+        )
+
+    async def _stop_temperature_monitor(self, _application: Application) -> None:
+        task = self._temperature_monitor_task
+        if task is None:
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        self._temperature_monitor_task = None
 
     def _lock_for(self, chat_id: int) -> asyncio.Lock:
         return self.chat_locks.setdefault(chat_id, asyncio.Lock())
