@@ -92,6 +92,50 @@ privada, tenha o arquivo PEM dessa CA disponível para configurá-lo. O cliente
 se conecta à API JSON-RPC 2.0 por WebSocket, evitando a API REST legada removida
 no TrueNAS 26.04.
 
+### Configurar um certificado de CA privada
+
+Se o certificado HTTPS do TrueNAS foi emitido por uma CA privada, o bot precisa
+confiar no certificado da CA para validar a conexão TLS:
+
+1. Na interface do TrueNAS, abra **Credentials > Certificates** (o nome pode
+   variar entre versões) e identifique a CA que emitiu o certificado usado pela
+   interface web. Exporte o certificado público da CA raiz e, se necessário,
+   da CA intermediária em formato PEM. Se o certificado do TrueNAS for
+   autoassinado, use o próprio certificado público exportado. **Não exporte
+   nem compartilhe a chave privada** do certificado.
+2. Confira se o nome usado em `TRUENAS_URL` está incluído nos nomes alternativos
+   (SAN) do certificado do TrueNAS. Por exemplo, para
+   `TRUENAS_URL=https://truenas.exemplo.local`, o certificado precisa ser válido
+   para `truenas.exemplo.local`. Se usar um endereço IP, esse IP também precisa
+   constar no certificado.
+3. Salve o arquivo PEM em um local persistente. Para execução local, defina
+   `TRUENAS_CA_BUNDLE` como o caminho desse arquivo no computador. Em Docker,
+   monte o arquivo no container e use como valor o caminho **dentro** do
+   container.
+4. Reinicie o bot ou recrie o Custom App para aplicar a configuração.
+
+Com Docker Compose, adicione ao serviço `bot` um bind mount somente leitura e
+aponte a variável para o destino dentro do container. O caminho antes dos dois
+pontos precisa existir no host; não use `/certs/...` como caminho do host:
+
+```yaml
+    environment:
+      TRUENAS_CA_BUNDLE: "/certs/truenas-ca.pem"
+      # mantenha aqui as demais variáveis de ambiente do bot
+    volumes:
+      - /mnt/POOL/apps/ia-admin/certs/truenas-ca.pem:/certs/truenas-ca.pem:ro
+```
+
+Substitua `POOL` pelo nome do pool. Crie a pasta
+`/mnt/POOL/apps/ia-admin/certs` no TrueNAS e copie o arquivo PEM para ela
+(por exemplo, usando SMB ou SCP) antes de iniciar o aplicativo. O caminho
+`/certs/truenas-ca.pem` à direita dos dois pontos é interno ao container; o
+caminho à esquerda é um arquivo existente no host. Para uma instalação com
+certificado emitido por uma CA pública já confiável no sistema, deixe
+`TRUENAS_CA_BUNDLE` vazio e não adicione esse volume. Não desative a validação
+TLS para contornar erros de certificado: confira a cadeia da CA, o caminho
+montado e se o hostname da URL corresponde ao certificado.
+
 Se estiver atualizando uma instalação existente, adicione `TRUENAS_USERNAME`
 ao `.env` ou à configuração do Custom App. Informe o usuário associado à chave
 de API. Depois, atualize o código e reconstrua/republique a imagem Docker antes
@@ -287,11 +331,13 @@ services:
       TRUENAS_URL: "https://IP_OU_NOME_DO_TRUENAS"
       TRUENAS_USERNAME: "USUARIO_DA_CHAVE"
       TRUENAS_API_KEY: "SUA_CHAVE_DE_API"
-      TRUENAS_CA_BUNDLE: ""
+      TRUENAS_CA_BUNDLE: "/certs/truenas-ca.pem"
       TELEGRAM_BOT_TOKEN: "TOKEN_DO_BOT"
       TELEGRAM_ALLOWED_CHAT_ID: "SEU_ID_NUMERICO"
       OLLAMA_MODEL: "qwen3:1.7b"
       OLLAMA_HOST: "http://ollama:11434"
+    volumes:
+      - /mnt/POOL/apps/ia-admin/certs/truenas-ca.pem:/certs/truenas-ca.pem:ro
 
 volumes:
   ollama_data:
@@ -310,10 +356,9 @@ necessárias. Não é preciso publicar a porta `11434` do Ollama para a Internet
 O bot remove o token do Telegram de mensagens de log e desativa os logs de
 requisição do cliente HTTP que poderiam incluir URLs autenticadas.
 
-Se o certificado HTTPS do TrueNAS for assinado por uma CA privada, monte o
-arquivo da CA no container do bot como volume somente leitura e defina
-`TRUENAS_CA_BUNDLE` para o caminho desse arquivo dentro do container. Prefira
-um certificado confiável em vez de desativar a validação TLS.
+Se o certificado HTTPS do TrueNAS for assinado por uma CA privada, siga
+[Configurar um certificado de CA privada](#configurar-um-certificado-de-ca-privada)
+e substitua `POOL` pelo pool usado no seu sistema.
 
 ### 3. Baixe o modelo no Ollama
 
