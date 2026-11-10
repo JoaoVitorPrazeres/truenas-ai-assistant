@@ -159,6 +159,35 @@ class TrueNASRpcTests(unittest.TestCase):
         self.assertEqual(result["cpu_percent"], 12.5)
         self.assertEqual(result["memory_available_gib"], 4)
 
+    def test_resource_usage_reads_real_matrix_series_format(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(return_value=[
+            {
+                "name": "cpu",
+                "identifier": "cpu",
+                "legend": ["time", "cpu", "cpu0", "cpu1", "cpu2", "cpu3", "cpu4", "cpu5"],
+                "data": [
+                    [1793987181, 82, 81, 92, 79, 80, 81, 79],
+                    [1793987182, 73, 70, 82, 74, 72, 68, 71],
+                ],
+            },
+            {
+                "name": "memory",
+                "identifier": "memory",
+                "legend": ["time", "available"],
+                "data": [
+                    [1793987181, 1536643100],
+                    [1793987182, 1600000000],
+                ],
+            },
+        ])
+
+        result = client.get_resource_usage()
+
+        self.assertEqual(result["cpu_percent"], 73)
+        self.assertEqual(result["memory_available_bytes"], 1600000000)
+        self.assertEqual(result["memory_available_gib"], 1.49)
+
     def test_system_info_is_normalized_without_disk_fields(self) -> None:
         client = TrueNASClient(make_settings())
         client._rpc = unittest.mock.Mock(return_value={

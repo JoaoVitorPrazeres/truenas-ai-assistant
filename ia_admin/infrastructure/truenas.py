@@ -389,24 +389,39 @@ class TrueNASClient:
             if not isinstance(entry, dict):
                 continue
             samples = entry.get("data")
+            name = entry.get("name")
+            legend = entry.get("legend")
+            mean = None
+            mean_key = None
+
             if isinstance(samples, list) and samples:
                 last_sample = samples[-1]
-                aggregations = (
-                    last_sample.get("aggregations") or {}
-                    if isinstance(last_sample, dict)
-                    else {}
-                )
-            else:
-                aggregations = entry.get("aggregations") or {}
-            mean = aggregations.get("mean")
-            if isinstance(mean, dict):
-                mean_key, mean = next(iter(mean.items()), (None, None))
-            elif isinstance(mean, list) and mean:
-                mean_key, mean = None, mean[-1]
-            else:
-                mean_key = None
+                if isinstance(last_sample, dict):
+                    aggregations = last_sample.get("aggregations") or {}
+                    mean = aggregations.get("mean")
+                    if isinstance(mean, dict):
+                        mean_key, mean = next(iter(mean.items()), (None, None))
+                    elif isinstance(mean, list) and mean:
+                        mean_key, mean = None, mean[-1]
+                elif isinstance(last_sample, (list, tuple)):
+                    if isinstance(legend, list) and legend:
+                        metric_name = "available" if name == "memory" else "cpu"
+                        try:
+                            column = legend.index(metric_name)
+                        except ValueError:
+                            column = 1 if len(last_sample) > 1 else None
+                        if column is not None and column < len(last_sample):
+                            mean = last_sample[column]
+                            mean_key = metric_name
 
-            name = entry.get("name")
+            if mean is None:
+                aggregations = entry.get("aggregations") or {}
+                mean = aggregations.get("mean")
+                if isinstance(mean, dict):
+                    mean_key, mean = next(iter(mean.items()), (None, None))
+                elif isinstance(mean, list) and mean:
+                    mean_key, mean = None, mean[-1]
+
             if name == "memory" and isinstance(mean, (int, float)) and mean > 100:
                 gib = round(mean / (1024 ** 3), 2)
                 if str(mean_key).casefold() == "available":
