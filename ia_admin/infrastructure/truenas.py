@@ -1,4 +1,5 @@
 import json
+import ipaddress
 import ssl
 from threading import RLock
 from typing import Any
@@ -27,6 +28,14 @@ def memory_bytes_to_human(value: int | float | None) -> str | None:
     if gib >= 1024:
         return f"{round(gib / 1024, 2)} TiB"
     return f"{round(gib, 2)} GiB"
+
+
+def canonical_ip_address(value: str) -> str:
+    address = value.split("/", maxsplit=1)[0]
+    try:
+        return str(ipaddress.ip_address(address))
+    except ValueError:
+        return address
 
 
 class TrueNASClient:
@@ -259,6 +268,7 @@ class TrueNASClient:
             data.get("uptime_seconds")
             or data.get("uptime")
         )
+        uptime_source = data.get("uptime")
         if isinstance(uptime_seconds, dict):
             uptime_seconds = uptime_seconds.get("seconds")
         if isinstance(uptime_seconds, str):
@@ -267,7 +277,11 @@ class TrueNASClient:
             except ValueError:
                 uptime_seconds = None
 
-        uptime_human = None
+        uptime_human = (
+            uptime_source.strip()
+            if isinstance(uptime_source, str) and uptime_source.strip()
+            else None
+        )
         if isinstance(uptime_seconds, (int, float)):
             total_seconds = int(uptime_seconds)
             days, remainder = divmod(total_seconds, 86400)
@@ -320,8 +334,12 @@ class TrueNASClient:
             "load_average": loadavg,
             "ecc_memory": data.get("ecc_memory"),
             "system_manufacturer": data.get("system_manufacturer"),
-            "system_product_name": data.get("system_product_name"),
-            "system_serial_number": data.get("system_serial_number"),
+            "system_product_name": (
+                data.get("system_product_name") or data.get("system_product")
+            ),
+            "system_serial_number": (
+                data.get("system_serial_number") or data.get("system_serial")
+            ),
         }
 
     def get_pools(self) -> list[dict[str, Any]]:
@@ -561,7 +579,11 @@ class TrueNASClient:
         interfaces = self._require_dict_list(
             self._rpc("interface.query"), "interface.query"
         )
+        addresses_in_use = self._require_dict_list(
+            self._rpc("interface.ip_in_use", [{}]), "interface.ip_in_use"
+        )
         normalized_interfaces = []
+        known_addresses = set()
         for interface in interfaces:
             state = interface.get("state")
             state = state if isinstance(state, dict) else {}
@@ -580,6 +602,7 @@ class TrueNASClient:
                 )
                 if isinstance(address, str) and address and address not in addresses:
                     addresses.append(address)
+                    known_addresses.add(canonical_ip_address(address))
 
             normalized_interfaces.append({
                 "name": interface.get("name"),
@@ -588,6 +611,37 @@ class TrueNASClient:
                 "addresses": addresses,
                 "link_speed_mbps": state.get("link_speed"),
             })
+
+        tailscale_range = ipaddress.ip_network("100.64.0.0/10")
+        for item in addresses_in_use:
+            address = item.get("address")
+            if not isinstance(address, str) or not address:
+                continue
+            normalized_address = canonical_ip_address(address)
+            if normalized_address in known_addresses:
+                continue
+            try:
+                is_tailscale_range = (
+                    ipaddress.ip_address(normalized_address) in tailscale_range
+                )
+            except (TypeError, ValueError):
+                is_tailscale_range = False
+
+            normalized_interfaces.append({
+                "name": (
+                    "IP adicional (interface não identificada)"
+                    if not is_tailscale_range
+                    else "IP adicional (faixa CGNAT do Tailscale)"
+                ),
+                "description": (
+                    "A API informou o endereço em uso, mas não o associou "
+                    "a uma interface."
+                ),
+                "state": None,
+                "addresses": [address],
+                "link_speed_mbps": None,
+            })
+            known_addresses.add(normalized_address)
         return normalized_interfaces
 
     def get_update_status(self) -> Any:

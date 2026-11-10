@@ -193,11 +193,14 @@ class TrueNASRpcTests(unittest.TestCase):
         client._rpc = unittest.mock.Mock(return_value={
             "hostname": "truenas",
             "version": "25.10.4",
+            "uptime": "1 hour, 23 minutes, 46 seconds",
             "uptime_seconds": 5026.28,
             "cpu_model": "Intel i5-8400T",
             "cores": 6,
             "physmem": 7710375936,
             "loadavg": [0.69, 0.80, 0.54],
+            "system_product": "Mini Server",
+            "system_serial": "serial-123",
         })
 
         result = client.get_system_info()
@@ -206,6 +209,8 @@ class TrueNASRpcTests(unittest.TestCase):
         self.assertEqual(result["uptime_human"], "1 hora, 23 minutos, 46 segundos")
         self.assertEqual(result["cpu_cores"], 6)
         self.assertEqual(result["memory_human"], "7.18 GiB")
+        self.assertEqual(result["system_product_name"], "Mini Server")
+        self.assertEqual(result["system_serial_number"], "serial-123")
         self.assertNotIn("disks", result)
         self.assertNotIn("disk_temperature", result)
 
@@ -322,28 +327,64 @@ class TrueNASRpcTests(unittest.TestCase):
 
     def test_network_interfaces_accepts_top_level_aliases(self) -> None:
         client = TrueNASClient(make_settings())
-        client._rpc = unittest.mock.Mock(return_value=[{
-            "name": "enp2s0f1",
-            "description": "LAN",
-            "state": {"link_state": "UP", "link_speed": 1000},
-            "aliases": [
-                {"address": "192.168.100.34"},
-                {"address": "192.168.100.34"},
-                {"address": "fe80::1"},
+        client._rpc = unittest.mock.Mock(side_effect=[
+            [{
+                "name": "enp2s0f1",
+                "description": "LAN",
+                "state": {"link_state": "UP", "link_speed": 1000},
+                "aliases": [
+                    {"address": "192.168.100.34"},
+                    {"address": "192.168.100.34"},
+                    {"address": "fe80::1"},
+                ],
+            }],
+            [
+                {"address": "192.168.100.34", "type": "INET", "netmask": 24},
+                {"address": "100.65.161.105", "type": "INET", "netmask": 32},
+                {"address": "2001:db8::2", "type": "INET6", "netmask": 64},
             ],
-        }])
+        ])
 
         result = client.get_network_interfaces()
 
         self.assertEqual(
             result,
-            [{
-                "name": "enp2s0f1",
-                "description": "LAN",
-                "state": "UP",
-                "addresses": ["192.168.100.34", "fe80::1"],
-                "link_speed_mbps": 1000,
-            }],
+            [
+                {
+                    "name": "enp2s0f1",
+                    "description": "LAN",
+                    "state": "UP",
+                    "addresses": ["192.168.100.34", "fe80::1"],
+                    "link_speed_mbps": 1000,
+                },
+                {
+                    "name": "IP adicional (faixa CGNAT do Tailscale)",
+                    "description": (
+                        "A API informou o endereço em uso, mas não o associou "
+                        "a uma interface."
+                    ),
+                    "state": None,
+                    "addresses": ["100.65.161.105"],
+                    "link_speed_mbps": None,
+                },
+                {
+                    "name": "IP adicional (interface não identificada)",
+                    "description": (
+                        "A API informou o endereço em uso, mas não o associou "
+                        "a uma interface."
+                    ),
+                    "state": None,
+                    "addresses": ["2001:db8::2"],
+                    "link_speed_mbps": None,
+                },
+            ],
+        )
+        self.assertEqual(
+            client._rpc.call_args_list,
+            [
+                unittest.mock.call("interface.query"),
+                unittest.mock.call("interface.ip_in_use", [{}]),
+            ],
         )
 
     def test_secondary_rpc_methods_build_params(self) -> None:
@@ -426,6 +467,7 @@ class TrueNASRpcTests(unittest.TestCase):
             side_effect=[
                 [{"name": "sda"}],
                 [{"id": 1, "level": "WARNING", "formatted": "Hot disk"}],
+                [],
                 [],
                 [{"name": "plex", "state": "RUNNING", "metadata": {"app_version": "1.0"}}],
                 [{"version": "24.10.2"}],

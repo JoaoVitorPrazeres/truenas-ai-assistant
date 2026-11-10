@@ -369,7 +369,11 @@ def format_direct_result(tool_name: str, result: Any) -> str:
                 if result.get("cpu_clock_mhz") is not None else None
             )),
             ("Memória total", result.get("memory_total_human") or result.get("memory_human")),
-            ("Memória ECC", result.get("ecc_memory")),
+            ("Memória ECC", (
+                "Ativada" if result.get("ecc_memory") is True
+                else "Desativada" if result.get("ecc_memory") is False
+                else result.get("ecc_memory")
+            )),
             ("Fabricante", result.get("system_manufacturer")),
             ("Produto", result.get("system_product_name")),
             ("Número de série", result.get("system_serial_number")),
