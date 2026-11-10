@@ -343,6 +343,7 @@ class TrueNASRpcTests(unittest.TestCase):
                 {"address": "100.65.161.105", "type": "INET", "netmask": 32},
                 {"address": "2001:db8::2", "type": "INET6", "netmask": 64},
             ],
+            "192.168.100.34",
         ])
 
         result = client.get_network_interfaces()
@@ -384,8 +385,23 @@ class TrueNASRpcTests(unittest.TestCase):
             [
                 unittest.mock.call("interface.query"),
                 unittest.mock.call("interface.ip_in_use", [{}]),
+                unittest.mock.call("interface.websocket_local_ip"),
             ],
         )
+
+    def test_network_interfaces_includes_websocket_local_ip_when_not_in_query(self) -> None:
+        client = TrueNASClient(make_settings())
+        client._rpc = unittest.mock.Mock(side_effect=[
+            [],
+            [],
+            "100.65.161.105",
+        ])
+
+        result = client.get_network_interfaces()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["name"], "IP local da conexão WebSocket")
+        self.assertEqual(result[0]["addresses"], ["100.65.161.105"])
 
     def test_secondary_rpc_methods_build_params(self) -> None:
         client = TrueNASClient(make_settings())
@@ -469,6 +485,7 @@ class TrueNASRpcTests(unittest.TestCase):
                 [{"id": 1, "level": "WARNING", "formatted": "Hot disk"}],
                 [],
                 [],
+                None,
                 [{"name": "plex", "state": "RUNNING", "metadata": {"app_version": "1.0"}}],
                 [{"version": "24.10.2"}],
             ],

@@ -40,6 +40,17 @@ class DirectReadonlyToolTests(unittest.TestCase):
         self.assertIn("100.64.0.5", formatted)
         self.assertIn("Tailscale", formatted)
 
+    def test_websocket_local_ip_is_not_mislabeled_as_tailscale(self) -> None:
+        formatted = format_direct_result("get_network_interfaces", [{
+            "name": "IP local da conexão WebSocket",
+            "state": None,
+            "addresses": ["192.168.100.34"],
+        }])
+
+        self.assertIn("Conexão com a API", formatted)
+        self.assertIn("192.168.100.34", formatted)
+        self.assertNotIn("Tailscale", formatted)
+
     def test_storage_and_pool_questions_call_get_pools(self) -> None:
         for question in (
             "Quais são os pools do servidor?",

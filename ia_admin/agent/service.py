@@ -402,7 +402,13 @@ def format_direct_result(tool_name: str, result: Any) -> str:
             description = interface.get("description") or ""
             state = interface.get("state") or "estado desconhecido"
             addresses = interface.get("addresses") or []
-            interface_label = "Tailscale" if "tailscale" in str(name).lower() or "tailscale" in str(description).lower() else "Rede"
+            lowered_label = f"{name} {description}".lower()
+            if "tailscale" in lowered_label:
+                interface_label = "Tailscale"
+            elif "websocket" in lowered_label:
+                interface_label = "Conexão com a API"
+            else:
+                interface_label = "Rede"
             lines.append(f"- {name}: {state} ({interface_label})")
             if addresses:
                 lines.extend(f"  - {address}" for address in addresses)

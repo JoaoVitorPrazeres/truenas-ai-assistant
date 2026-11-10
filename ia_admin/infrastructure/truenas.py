@@ -582,6 +582,7 @@ class TrueNASClient:
         addresses_in_use = self._require_dict_list(
             self._rpc("interface.ip_in_use", [{}]), "interface.ip_in_use"
         )
+        websocket_local_ip = self._rpc("interface.websocket_local_ip")
         normalized_interfaces = []
         known_addresses = set()
         for interface in interfaces:
@@ -642,6 +643,20 @@ class TrueNASClient:
                 "link_speed_mbps": None,
             })
             known_addresses.add(normalized_address)
+
+        if isinstance(websocket_local_ip, str) and websocket_local_ip:
+            normalized_address = canonical_ip_address(websocket_local_ip)
+            if normalized_address not in known_addresses:
+                normalized_interfaces.append({
+                    "name": "IP local da conexão WebSocket",
+                    "description": (
+                        "Endereço local usado nesta conexão com a API; "
+                        "não representa necessariamente um IP do Tailscale."
+                    ),
+                    "state": None,
+                    "addresses": [websocket_local_ip],
+                    "link_speed_mbps": None,
+                })
         return normalized_interfaces
 
     def get_update_status(self) -> Any:
