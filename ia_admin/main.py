@@ -26,7 +26,9 @@ def main() -> None:
         ollama=OllamaClient(settings),
         tool_functions=build_tool_functions(truenas),
     )
-    app = TelegramBotAdapter(settings, agent).build_application()
+    app = TelegramBotAdapter(
+        settings, agent, truenas.shutdown_system
+    ).build_application()
     logging.getLogger("ia-admin-telegram").info(
         "Bot iniciado. Aguardando mensagens..."
     )

@@ -489,6 +489,12 @@ class TrueNASClient:
     def restart_service(self, service_name: str) -> Any:
         return self._rpc("service.restart", [service_name, {}])
 
+    def shutdown_system(self) -> Any:
+        return self._rpc(
+            "system.shutdown",
+            ["Desligamento solicitado pelo Telegram", {"delay": None}],
+        )
+
     def create_dataset(self, pool_name: str, dataset_name: str) -> Any:
         return self._rpc(
             "pool.dataset.create",

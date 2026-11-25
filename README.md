@@ -39,6 +39,9 @@ Você pode perguntar, em linguagem natural, sobre:
 O bot também pode reiniciar um serviço ou criar um dataset. Antes dessas ações,
 ele mostra o que pretende fazer e pede que você confirme ou cancele pelo botão
 no Telegram. Não confirme uma operação se não tiver certeza do que ela fará.
+O comando `/shutdown` também permite desligar o host TrueNAS, mas só executa
+depois de uma confirmação explícita; todos os serviços e o armazenamento ficam
+indisponíveis até o servidor ser ligado novamente.
 
 ## 1. Baixe o projeto
 
@@ -192,6 +195,8 @@ O significado de cada opção:
 Não coloque aspas em volta dos valores. O bot não inicia sem URL, usuário e
 chave do TrueNAS, token do Telegram e pelo menos um ID de chat permitido.
 Mantenha o arquivo `.env` privado: ele contém credenciais.
+Para usar `/shutdown`, a chave de API do TrueNAS precisa estar associada a um
+usuário com o papel `FULL_ADMIN`.
 
 O monitor automático inicia junto com o bot, verifica discos e sensores de CPU
 disponíveis pela API do TrueNAS e envia alertas para todos os chats autorizados
@@ -247,6 +252,7 @@ Comandos disponíveis:
 - `/help` mostra a ajuda do bot.
 - `/status` mostra o estado da conversa e algumas configurações.
 - `/reset` limpa o histórico e qualquer confirmação pendente.
+- `/shutdown` solicita o desligamento do host TrueNAS depois de confirmação.
 
 ## Executar com Docker em outro computador (opcional)
 

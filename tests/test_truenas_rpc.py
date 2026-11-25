@@ -220,6 +220,7 @@ class TrueNASRpcTests(unittest.TestCase):
 
         client.restart_service("smb")
         client.create_dataset("tank", "backups")
+        client.shutdown_system()
 
         self.assertEqual(
             client._rpc.call_args_list,
@@ -228,6 +229,13 @@ class TrueNASRpcTests(unittest.TestCase):
                 unittest.mock.call(
                     "pool.dataset.create",
                     [{"name": "tank/backups"}],
+                ),
+                unittest.mock.call(
+                    "system.shutdown",
+                    [
+                        "Desligamento solicitado pelo Telegram",
+                        {"delay": None},
+                    ],
                 ),
             ],
         )

@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import re
+import secrets
+from collections.abc import Callable
 from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -16,6 +18,7 @@ from telegram.ext import (
 
 from ia_admin.agent.service import AgentResponse, AgentService
 from ia_admin.config import Settings
+from ia_admin.infrastructure.http_client import ExternalServiceError
 from ia_admin.interfaces.temperature_monitor import TemperatureMonitor
 
 
@@ -67,10 +70,17 @@ async def safe_send_message(target: Any, text: str, keyboard: Any = None) -> Non
 
 
 class TelegramBotAdapter:
-    def __init__(self, settings: Settings, agent: AgentService):
+    def __init__(
+        self,
+        settings: Settings,
+        agent: AgentService,
+        shutdown_server: Callable[[], Any],
+    ):
         self.settings = settings
         self.agent = agent
+        self.shutdown_server = shutdown_server
         self.chat_locks: dict[int, asyncio.Lock] = {}
+        self.pending_shutdowns: dict[int, str] = {}
         self.temperature_monitor = TemperatureMonitor(
             settings, agent.tool_functions
         )
@@ -89,7 +99,19 @@ class TelegramBotAdapter:
         app.add_handler(CommandHandler("help", self.help_command))
         app.add_handler(CommandHandler("status", self.status_command))
         app.add_handler(CommandHandler("reset", self.reset_command))
-        app.add_handler(CallbackQueryHandler(self.handle_confirmation))
+        app.add_handler(CommandHandler("shutdown", self.shutdown_command))
+        app.add_handler(
+            CallbackQueryHandler(
+                self.handle_shutdown_confirmation,
+                pattern=r"^shutdown:(?:confirm|cancel):[a-f0-9]{8}$",
+            )
+        )
+        app.add_handler(
+            CallbackQueryHandler(
+                self.handle_confirmation,
+                pattern=r"^(?:confirm|cancel)$",
+            )
+        )
         app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
@@ -192,6 +214,7 @@ class TelegramBotAdapter:
             "- /help: mostrar ajuda\n"
             "- /status: mostrar o estado do agente\n"
             "- /reset: limpar o histórico desta conversa\n"
+            "- /shutdown: desligar o host TrueNAS após confirmação\n"
             "- Mensagem normal: pergunta ao assistente sobre o TrueNAS",
         )
 
@@ -229,6 +252,90 @@ class TelegramBotAdapter:
             return
         self.agent.reset_conversation(chat.id)
         await safe_send_message(message, "Histórico desta conversa foi limpo.")
+
+    async def shutdown_command(
+        self, update: Update, _context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        chat = update.effective_chat
+        message = update.effective_message
+        if not chat or not message:
+            return
+        if not self.agent.is_allowed(chat.id):
+            await message.reply_text("Acesso não autorizado.")
+            return
+        if chat.id in self.pending_shutdowns:
+            await safe_send_message(
+                message,
+                "Já existe um pedido de desligamento aguardando confirmação.",
+            )
+            return
+
+        request_id = secrets.token_hex(4)
+        self.pending_shutdowns[chat.id] = request_id
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "⚠️ Sim, desligar",
+                callback_data=f"shutdown:confirm:{request_id}",
+            ),
+            InlineKeyboardButton(
+                "❌ Cancelar",
+                callback_data=f"shutdown:cancel:{request_id}",
+            ),
+        ]])
+        await safe_send_message(
+            message,
+            "⚠️ Esta ação desligará o host TrueNAS inteiro. Todos os serviços "
+            "e o armazenamento ficarão indisponíveis até o servidor ser "
+            "ligado novamente. Confirma o desligamento?",
+            keyboard,
+        )
+
+    async def handle_shutdown_confirmation(
+        self, update: Update, _context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        if not query or not query.message:
+            return
+        chat_id = query.message.chat.id
+        await query.answer()
+        if not self.agent.is_allowed(chat_id):
+            await query.edit_message_text("Acesso não autorizado.")
+            return
+
+        if not isinstance(query.data, str):
+            await query.edit_message_text(
+                "Esta confirmação expirou ou já foi processada."
+            )
+            return
+        _, action, request_id = query.data.split(":", maxsplit=2)
+        if self.pending_shutdowns.get(chat_id) != request_id:
+            await query.edit_message_text(
+                "Esta confirmação expirou ou já foi processada."
+            )
+            return
+
+        del self.pending_shutdowns[chat_id]
+        if action == "cancel":
+            await query.edit_message_text("Desligamento cancelado.")
+            return
+
+        await query.edit_message_text(
+            "Confirmação recebida. Enviando a solicitação de desligamento "
+            "ao TrueNAS..."
+        )
+        try:
+            await asyncio.to_thread(self.shutdown_server)
+        except ExternalServiceError as exc:
+            log.exception("Falha ao solicitar desligamento do TrueNAS")
+            await safe_send_message(
+                _BotMessageTarget(_context.bot, chat_id),
+                f"Não foi possível desligar o TrueNAS: {exc}",
+            )
+            return
+        log.info(
+            "Solicitação de desligamento enviada ao TrueNAS pelo chat %s",
+            chat_id,
+        )
 
     async def handle_message(
         self, update: Update, _context: ContextTypes.DEFAULT_TYPE
